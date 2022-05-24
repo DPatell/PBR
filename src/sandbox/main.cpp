@@ -76,8 +76,8 @@ static std::vector<char> read_file(const std::string& filename)
  */
 struct queue_family_indicies
 {
-    std::optional<uint32_t> graphics_family;
-    std::optional<uint32_t> present_family;
+    std::optional<uint32_t> graphics_family{std::nullopt};
+    std::optional<uint32_t> present_family{std::nullopt};
 
     bool is_complete()
     {
@@ -799,7 +799,7 @@ queue_family_indicies application::fetch_queue_family_indicies(VkPhysicalDevice 
     {
         if (queue_family_property.queueCount > 0 && queue_family_property.queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
-            indicies.graphics_family = i;
+            indicies.graphics_family = std::make_optional(i);
         }
 
         VkBool32 present_support = false;
@@ -807,7 +807,7 @@ queue_family_indicies application::fetch_queue_family_indicies(VkPhysicalDevice 
 
         if (queue_family_property.queueCount > 0 && present_support)
         {
-            indicies.present_family = i;
+            indicies.present_family = std::make_optional(i);
         }
 
         if (indicies.is_complete())
@@ -1016,7 +1016,7 @@ void application::init_vulkan()
     debug_utils_messenger_create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     debug_utils_messenger_create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
         | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    debug_utils_messenger_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    debug_utils_messenger_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     debug_utils_messenger_create_info.pfnUserCallback = debug_callback;
     debug_utils_messenger_create_info.pUserData = nullptr;
 
@@ -1060,7 +1060,6 @@ void application::init_vulkan()
 
     const float queue_priority = 1.0f;
 
-    VkDeviceQueueCreateInfo device_queue_create_info{};
     std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
     std::set<uint32_t> unique_queue_families = {indicies.graphics_family.value(), indicies.present_family.value()};
 
