@@ -15,7 +15,7 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
-#include <glm/vec4.hpp>
+#include <glm/glm.hpp>
 
 #include <iostream>
 #include <vector>
@@ -25,30 +25,58 @@
 #include <algorithm>
 #include <limits>
 #include <set>
+#include <array>
 
 /**
  * \brief Macro that checks if a vulkan api function was successfull or not. 
  * \param call Any vulkan api function that returns a VkResult.
  */
-#define VK_CHECK(call) do { VkResult result_ = call; assert(result_ == VK_SUCCESS); } while(0)
+#define VK_CHECK(call) do { VkResult result_ = call; assert(result_ == VK_SUCCESS); } while (0)
 
-/**
- * \brief Callback Function for our debug messenger that the validation layers use.
- * \param message_severity A bitmask of VkDebugUtilsMessageSeverityFlagBitsEXT specifying which type of event(s) will cause this callback to be called.
- * \param message_type A bitmask of VkDebugUtilsMessageTypeFlagBitsEXT specifying which type of event(s) will cause this callback to be called. 
- * \param p_callback_data Contains all the callback related data in the VkDebugUtilsMessengerCallbackDataEXT structure. 
- * \param p_user_data User data provided when the VkDebugUtilsMessengerEXT was created.
- * \return VkBool32
- */
-static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-                                                     VkDebugUtilsMessageTypeFlagsEXT message_type,
-                                                     const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data,
-                                                     void* p_user_data)
+struct vertex
 {
-    std::cerr << "[Validation Layer]: " << p_callback_data->pMessage << std::endl;
+    glm::vec2 position;
+    glm::vec3 color;
 
-    return VK_FALSE;
-}
+    static VkVertexInputBindingDescription get_vertex_input_binding_description()
+    {
+        VkVertexInputBindingDescription vertex_input_binding_description;
+        vertex_input_binding_description.binding = 0;
+        vertex_input_binding_description.stride = sizeof(vertex);
+        vertex_input_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        return vertex_input_binding_description;
+    }
+
+    static std::array<VkVertexInputAttributeDescription, 2> get_vertex_input_attribute_descriptions()
+    {
+        std::array<VkVertexInputAttributeDescription, 2> vertex_input_attribute_descriptions = {};
+
+        vertex_input_attribute_descriptions[0].binding = 0;
+        vertex_input_attribute_descriptions[0].location = 0;
+        vertex_input_attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        vertex_input_attribute_descriptions[0].offset = offsetof(vertex, position);
+
+        vertex_input_attribute_descriptions[1].binding = 0;
+        vertex_input_attribute_descriptions[1].location = 1;
+        vertex_input_attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        vertex_input_attribute_descriptions[1].offset = offsetof(vertex, color);
+
+        return vertex_input_attribute_descriptions;
+    }
+};
+
+const std::vector<vertex> vertices = {
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2,
+    2, 3, 0,
+};
 
 /**
  * \brief Reads text or binary files.
@@ -91,11 +119,268 @@ struct queue_family_indicies
 struct renderer_context
 {
     VkDevice vk_device_{VK_NULL_HANDLE};
+    VkPhysicalDevice vk_physical_device_{VK_NULL_HANDLE};
+    VkCommandPool vk_command_pool_{VK_NULL_HANDLE};
     VkFormat vk_format_;
     VkExtent2D vk_extent_2d_;
     std::vector<VkImageView> vk_image_views_;
-    queue_family_indicies queue_family_indicies;
+
+    VkQueue graphics_queue{VK_NULL_HANDLE};
+    VkQueue present_queue{VK_NULL_HANDLE};
 };
+
+/**
+ * \brief 
+ */
+class render_data
+{
+public:
+    render_data(const renderer_context& renderer_context) : renderer_context_(renderer_context)
+    {
+    }
+
+    void init(const std::string& vertex_shader_file, const std::string& fragment_shader_file);
+    void shutdown();
+
+    inline VkShaderModule get_vertex_shader() const { return vk_vertex_shader_; };
+    inline VkShaderModule get_fragment_shader() const { return vk_fragment_shader_; };
+
+    inline VkBuffer get_vertex_buffer() const { return vk_vertex_buffer_; };
+    inline VkBuffer get_index_buffer() const { return vk_index_buffer_; };
+
+private:
+    uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags memory_property_flags) const;
+
+    VkShaderModule create_shader(const std::string &path) const;
+
+    void create_vertex_buffer();
+    void create_index_buffer();
+    void create_buffer(VkDeviceSize device_size, VkBufferUsageFlags buffer_usage_flags, VkMemoryPropertyFlags memory_property_flags, VkBuffer &buffer, VkDeviceMemory &device_memory) const;
+    void copy_buffer(VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize device_size) const;
+
+private:
+    renderer_context renderer_context_;
+
+    VkShaderModule vk_vertex_shader_{VK_NULL_HANDLE};
+    VkShaderModule vk_fragment_shader_{VK_NULL_HANDLE};
+
+    VkBuffer vk_vertex_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory vk_vertex_buffer_memory_{VK_NULL_HANDLE};
+
+    VkBuffer vk_index_buffer_{VK_NULL_HANDLE};
+    VkDeviceMemory vk_index_buffer_memory_{VK_NULL_HANDLE};
+};
+
+/**
+ * \brief 
+ * \param vertex_shader_file 
+ * \param fragment_shader_file 
+ */
+void render_data::init(const std::string& vertex_shader_file, const std::string& fragment_shader_file)
+{
+    vk_vertex_shader_ = create_shader(vertex_shader_file);
+    vk_fragment_shader_ = create_shader(fragment_shader_file);
+
+    create_vertex_buffer();
+    create_index_buffer();
+}
+
+/**
+ * \brief 
+ */
+void render_data::shutdown()
+{
+    vkDestroyBuffer(renderer_context_.vk_device_, vk_vertex_buffer_, nullptr);
+    vk_vertex_buffer_ = VK_NULL_HANDLE;
+
+    vkFreeMemory(renderer_context_.vk_device_, vk_vertex_buffer_memory_, nullptr);
+    vk_vertex_buffer_memory_ = VK_NULL_HANDLE;
+
+    vkDestroyBuffer(renderer_context_.vk_device_, vk_index_buffer_, nullptr);
+    vk_index_buffer_ = VK_NULL_HANDLE;
+
+    vkFreeMemory(renderer_context_.vk_device_, vk_index_buffer_memory_, nullptr);
+    vk_index_buffer_memory_ = VK_NULL_HANDLE;
+
+    vkDestroyShaderModule(renderer_context_.vk_device_, vk_vertex_shader_, nullptr);
+    vk_vertex_shader_ = VK_NULL_HANDLE;
+
+    vkDestroyShaderModule(renderer_context_.vk_device_, vk_fragment_shader_, nullptr);
+    vk_fragment_shader_ = VK_NULL_HANDLE;
+}
+
+/**
+ * \brief 
+ * \param type_filter 
+ * \param memory_property_flags 
+ * \return 
+ */
+uint32_t render_data::find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags memory_property_flags) const
+{
+    VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(renderer_context_.vk_physical_device_, &physical_device_memory_properties);
+
+    for (uint32_t i = 0; i < physical_device_memory_properties.memoryTypeCount; i++)
+    {
+        uint32_t memory_type_properties = physical_device_memory_properties.memoryTypes[i].propertyFlags;
+        if ((type_filter & (1 << i)) && (memory_type_properties & memory_property_flags) == memory_property_flags)
+        {
+            return i;
+        }
+    }
+
+    assert(false, "Can't find suitable memory type");
+}
+
+/**
+ * \brief 
+ * \param device_size 
+ * \param buffer_usage_flags 
+ * \param memory_property_flags 
+ * \param buffer 
+ * \param device_memory 
+ */
+void render_data::create_buffer(VkDeviceSize device_size, VkBufferUsageFlags buffer_usage_flags, VkMemoryPropertyFlags memory_property_flags, VkBuffer& buffer, VkDeviceMemory& device_memory) const
+{
+    // NOTE(dhaval): Create Buffer
+    VkBufferCreateInfo buffer_create_info{};
+    buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buffer_create_info.size = device_size;
+    buffer_create_info.usage = buffer_usage_flags;
+    buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VK_CHECK(vkCreateBuffer(renderer_context_.vk_device_, &buffer_create_info, nullptr, &buffer));
+
+    // NOTE(dhaval): Allocate memory for the created buffer
+    VkMemoryRequirements memory_requirements{};
+    vkGetBufferMemoryRequirements(renderer_context_.vk_device_, buffer, &memory_requirements);
+
+    VkMemoryAllocateInfo memory_allocate_info{};
+    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memory_allocate_info.allocationSize = memory_requirements.size;
+    memory_allocate_info.memoryTypeIndex = find_memory_type(memory_requirements.memoryTypeBits, memory_property_flags);
+
+    VK_CHECK(vkAllocateMemory(renderer_context_.vk_device_, &memory_allocate_info, nullptr, &device_memory));
+    VK_CHECK(vkBindBufferMemory(renderer_context_.vk_device_, buffer, device_memory, 0));
+}
+
+/**
+ * \brief 
+ * \param source_buffer 
+ * \param destination_buffer 
+ * \param device_size 
+ */
+void render_data::copy_buffer(VkBuffer source_buffer, VkBuffer destination_buffer, VkDeviceSize device_size) const
+{
+    VkCommandBufferAllocateInfo command_buffer_allocate_info{};
+    command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_allocate_info.commandPool = renderer_context_.vk_command_pool_;
+    command_buffer_allocate_info.commandBufferCount = 1;
+
+    VkCommandBuffer command_buffer;
+    VK_CHECK(vkAllocateCommandBuffers(renderer_context_.vk_device_, &command_buffer_allocate_info, &command_buffer));
+
+    VkCommandBufferBeginInfo command_buffer_begin_info{};
+    command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info));
+
+    VkBufferCopy buffer_copy_region{};
+    buffer_copy_region.size = device_size;
+    vkCmdCopyBuffer(command_buffer, source_buffer, destination_buffer, 1, &buffer_copy_region);
+
+    VK_CHECK(vkEndCommandBuffer(command_buffer));
+
+    VkSubmitInfo submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &command_buffer;
+
+    VK_CHECK(vkQueueSubmit(renderer_context_.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
+    VK_CHECK(vkQueueWaitIdle(renderer_context_.graphics_queue));
+
+    vkFreeCommandBuffers(renderer_context_.vk_device_, renderer_context_.vk_command_pool_, 1, &command_buffer);
+}
+
+/**
+ * \brief 
+ * \param path 
+ * \return 
+ */
+VkShaderModule render_data::create_shader(const std::string& path) const
+{
+    std::vector<char> code = read_file(path);
+
+    VkShaderModuleCreateInfo shader_module_create_info{};
+    shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shader_module_create_info.codeSize = code.size();
+    shader_module_create_info.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+    VkShaderModule shader_module;
+    VK_CHECK(vkCreateShaderModule(renderer_context_.vk_device_, &shader_module_create_info, nullptr, &shader_module));
+
+    return shader_module;
+}
+
+/**
+ * \brief 
+ */
+void render_data::create_vertex_buffer()
+{
+    VkDeviceSize buffer_size = sizeof(vertex) * vertices.size();
+
+    VkBuffer staging_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
+
+    create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_vertex_buffer_, vk_vertex_buffer_memory_);
+
+    // NOTE(dhaval): Create staging buffer.
+    create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, staging_buffer, staging_buffer_memory);
+
+    // NOTE(dhaval): Fill staging buffer.
+    void* data = nullptr;
+    VK_CHECK(vkMapMemory(renderer_context_.vk_device_, staging_buffer_memory, 0, buffer_size, 0, &data));
+    memcpy(data, vertices.data(), static_cast<size_t>(buffer_size));
+    vkUnmapMemory(renderer_context_.vk_device_, staging_buffer_memory);
+
+    // NOTE(dhaval): Transfer to GPU local memory.
+    copy_buffer(staging_buffer, vk_vertex_buffer_, buffer_size);
+
+    // NOTE(dhaval): Destroy staging buffer.
+    vkDestroyBuffer(renderer_context_.vk_device_, staging_buffer, nullptr);
+    vkFreeMemory(renderer_context_.vk_device_, staging_buffer_memory, nullptr);
+}
+
+/**
+ * \brief 
+ */
+void render_data::create_index_buffer()
+{
+    VkDeviceSize buffer_size = sizeof(uint16_t) * indices.size();
+
+    VkBuffer staging_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
+
+    create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_index_buffer_, vk_index_buffer_memory_);
+
+    // NOTE(dhaval): Create staging buffer.
+    create_buffer(buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, staging_buffer, staging_buffer_memory);
+
+    // NOTE(dhaval): Fill staging buffer.
+    void* data = nullptr;
+    VK_CHECK(vkMapMemory(renderer_context_.vk_device_, staging_buffer_memory, 0, buffer_size, 0, &data));
+    memcpy(data, indices.data(), static_cast<size_t>(buffer_size));
+    vkUnmapMemory(renderer_context_.vk_device_, staging_buffer_memory);
+
+    // NOTE(dhaval): Transfer to GPU local memory.
+    copy_buffer(staging_buffer, vk_index_buffer_, buffer_size);
+
+    // NOTE(dhaval): Destroy staging buffer.
+    vkDestroyBuffer(renderer_context_.vk_device_, staging_buffer, nullptr);
+    vkFreeMemory(renderer_context_.vk_device_, staging_buffer_memory, nullptr);
+}
 
 /**
  * \brief Renderer that the application will create and use.
@@ -103,7 +388,7 @@ struct renderer_context
 class renderer
 {
 public:
-    renderer(const renderer_context& context) : context_(context)
+    renderer(const renderer_context& context) : context_(context), data_(context)
     {
     }
 
@@ -112,21 +397,15 @@ public:
     void shutdown();
 
 private:
-    VkShaderModule create_shader(const std::string& file_path) const;
-
-private:
+    render_data data_;
     renderer_context context_;
 
     VkRenderPass vk_render_pass_{VK_NULL_HANDLE};
     VkPipelineLayout vk_pipeline_layout_{VK_NULL_HANDLE};
     VkPipeline vk_pipeline_{VK_NULL_HANDLE};
-    VkCommandPool vk_command_pool_{VK_NULL_HANDLE};
 
     std::vector<VkFramebuffer> vk_frame_buffers_;
     std::vector<VkCommandBuffer> vk_command_buffers_;
-
-    VkShaderModule vertex_shader_{VK_NULL_HANDLE};
-    VkShaderModule fragment_shader_{VK_NULL_HANDLE};
 };
 
 /**
@@ -136,31 +415,33 @@ private:
  */
 void renderer::init(const std::string& vertex_shader_file, const std::string& fragment_shader_file)
 {
-    vertex_shader_ = create_shader(vertex_shader_file);
-    fragment_shader_ = create_shader(fragment_shader_file);
+    data_.init(vertex_shader_file, fragment_shader_file);
 
     // NOTE(dhaval): Creating Shader Stages.
     VkPipelineShaderStageCreateInfo vertex_shader_stage_create_info{};
     vertex_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     vertex_shader_stage_create_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertex_shader_stage_create_info.module = vertex_shader_;
+    vertex_shader_stage_create_info.module = data_.get_vertex_shader();
     vertex_shader_stage_create_info.pName = "main";
 
     VkPipelineShaderStageCreateInfo fragment_shader_stage_create_info{};
     fragment_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fragment_shader_stage_create_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragment_shader_stage_create_info.module = fragment_shader_;
+    fragment_shader_stage_create_info.module = data_.get_fragment_shader();
     fragment_shader_stage_create_info.pName = "main";
 
     VkPipelineShaderStageCreateInfo shader_stages[] = {vertex_shader_stage_create_info, fragment_shader_stage_create_info};
 
     // NOTE(dhaval): Creating Vertex Input.
+    VkVertexInputBindingDescription vertex_input_binding_description = vertex::get_vertex_input_binding_description();
+    std::array<VkVertexInputAttributeDescription, 2> vertex_input_attribute_descriptions = vertex::get_vertex_input_attribute_descriptions();
+
     VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info{};
     vertex_input_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_state_create_info.vertexBindingDescriptionCount = 0;
-    vertex_input_state_create_info.pVertexBindingDescriptions = nullptr;
-    vertex_input_state_create_info.vertexAttributeDescriptionCount = 0;
-    vertex_input_state_create_info.pVertexAttributeDescriptions = nullptr;
+    vertex_input_state_create_info.vertexBindingDescriptionCount = 1;
+    vertex_input_state_create_info.pVertexBindingDescriptions = &vertex_input_binding_description;
+    vertex_input_state_create_info.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_input_attribute_descriptions.size());
+    vertex_input_state_create_info.pVertexAttributeDescriptions = vertex_input_attribute_descriptions.data();
 
     // NOTE(dhaval): Creating Input Assembly.
     VkPipelineInputAssemblyStateCreateInfo input_assembly_state_create_info{};
@@ -334,19 +615,19 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     }
 
     // NOTE(dhaval): Create Command Pool
-    VkCommandPoolCreateInfo command_pool_create_info{};
-    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    command_pool_create_info.queueFamilyIndex = context_.queue_family_indicies.graphics_family.value();
-    command_pool_create_info.flags = 0;
-
-    VK_CHECK(vkCreateCommandPool(context_.vk_device_, &command_pool_create_info, nullptr, &vk_command_pool_));
+    /* VkCommandPoolCreateInfo command_pool_create_info{};
+     command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+     command_pool_create_info.queueFamilyIndex = context_.queue_family_indicies.graphics_family.value();
+     command_pool_create_info.flags = 0;
+ 
+     VK_CHECK(vkCreateCommandPool(context_.vk_device_, &command_pool_create_info, nullptr, &vk_command_pool_));*/
 
     // NOTE(dhaval): Create Command Buffers
     vk_command_buffers_.resize(context_.vk_image_views_.size());
 
     VkCommandBufferAllocateInfo command_buffer_allocate_info{};
     command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    command_buffer_allocate_info.commandPool = vk_command_pool_;
+    command_buffer_allocate_info.commandPool = context_.vk_command_pool_;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     command_buffer_allocate_info.commandBufferCount = static_cast<uint32_t>(vk_command_buffers_.size());
 
@@ -374,13 +655,27 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
 
         vkCmdBeginRenderPass(vk_command_buffers_[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(vk_command_buffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_);
-        vkCmdDraw(vk_command_buffers_[i], 3, 1, 0, 0);
+
+        VkBuffer vertex_buffers[] = {data_.get_vertex_buffer()};
+        VkBuffer index_buffer = data_.get_index_buffer();
+        VkDeviceSize offsets[] = {0};
+
+        vkCmdBindVertexBuffers(vk_command_buffers_[i], 0, 1, vertex_buffers, offsets);
+        vkCmdBindIndexBuffer(vk_command_buffers_[i], index_buffer, 0, VK_INDEX_TYPE_UINT16);
+
+        vkCmdDrawIndexed(vk_command_buffers_[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+
         vkCmdEndRenderPass(vk_command_buffers_[i]);
 
         VK_CHECK(vkEndCommandBuffer(vk_command_buffers_[i]));
     }
 }
 
+/**
+ * \brief 
+ * \param image_index 
+ * \return 
+ */
 VkCommandBuffer renderer::render(uint32_t image_index)
 {
     return vk_command_buffers_[image_index];
@@ -391,8 +686,7 @@ VkCommandBuffer renderer::render(uint32_t image_index)
  */
 void renderer::shutdown()
 {
-    vkDestroyCommandPool(context_.vk_device_, vk_command_pool_, nullptr);
-    vk_command_pool_ = VK_NULL_HANDLE;
+    data_.shutdown();
 
     for (auto frame_buffer : vk_frame_buffers_)
     {
@@ -409,32 +703,6 @@ void renderer::shutdown()
 
     vkDestroyRenderPass(context_.vk_device_, vk_render_pass_, nullptr);
     vk_render_pass_ = VK_NULL_HANDLE;
-
-    vkDestroyShaderModule(context_.vk_device_, vertex_shader_, nullptr);
-    vertex_shader_ = VK_NULL_HANDLE;
-
-    vkDestroyShaderModule(context_.vk_device_, fragment_shader_, nullptr);
-    fragment_shader_ = VK_NULL_HANDLE;
-}
-
-/**
- * \brief Turns a shader into a VkShaderModule
- * \param file_path Path to the shader file
- * \return VkShaderModule
- */
-VkShaderModule renderer::create_shader(const std::string& file_path) const
-{
-    std::vector<char> code = read_file(file_path);
-
-    VkShaderModuleCreateInfo shader_module_create_info{};
-    shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shader_module_create_info.codeSize = code.size();
-    shader_module_create_info.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-    VkShaderModule shader_module;
-    VK_CHECK(vkCreateShaderModule(context_.vk_device_, &shader_module_create_info, nullptr, &shader_module));
-
-    return shader_module;
 }
 
 /**
@@ -456,6 +724,24 @@ struct SwapchainSettings
     VkPresentModeKHR present_mode_khr;
     VkExtent2D extent_2d;
 };
+
+/**
+ * \brief Callback Function for our debug messenger that the validation layers use.
+ * \param message_severity A bitmask of VkDebugUtilsMessageSeverityFlagBitsEXT specifying which type of event(s) will cause this callback to be called.
+ * \param message_type A bitmask of VkDebugUtilsMessageTypeFlagBitsEXT specifying which type of event(s) will cause this callback to be called.
+ * \param p_callback_data Contains all the callback related data in the VkDebugUtilsMessengerCallbackDataEXT structure.
+ * \param p_user_data User data provided when the VkDebugUtilsMessengerEXT was created.
+ * \return VkBool32
+ */
+static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+                                                     VkDebugUtilsMessageTypeFlagsEXT message_type,
+                                                     const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data,
+                                                     void* p_user_data)
+{
+    std::cerr << "[Validation Layer]: " << p_callback_data->pMessage << std::endl;
+
+    return VK_FALSE;
+}
 
 /**
  * \brief This class is used to initialize and manage our applications state.
@@ -509,6 +795,8 @@ private:
 
     VkFormat vk_swapchain_image_format_;
     VkExtent2D vk_swapchain_extent_2d_;
+
+    VkCommandPool vk_command_pool_{VK_NULL_HANDLE};
 
     std::vector<VkSemaphore> vk_available_image_semaphores_;
     std::vector<VkSemaphore> vk_finished_render_semaphores_;
@@ -625,10 +913,13 @@ void application::init_renderer()
 {
     renderer_context context = {};
     context.vk_device_ = vk_device_;
+    context.vk_physical_device_ = vk_physical_device_;
+    context.vk_command_pool_ = vk_command_pool_;
     context.vk_format_ = vk_swapchain_image_format_;
     context.vk_extent_2d_ = vk_swapchain_extent_2d_;
     context.vk_image_views_ = vk_swapchain_image_views_;
-    context.queue_family_indicies = fetch_queue_family_indicies(vk_physical_device_);
+    context.graphics_queue = vk_graphics_queue_;
+    context.present_queue = vk_present_queue_;
 
     renderer_ = new renderer(context);
     renderer_->init("D:/PBR/shaders/vertex_shader.spv", "D:/PBR/shaders/fragment_shader.spv");
@@ -1196,6 +1487,14 @@ void application::init_vulkan()
 
         VK_CHECK(vkCreateFence(vk_device_, &fence_create_info, nullptr, &vk_in_flight_fences_[i]));
     }
+
+    // NOTE(dhaval): Create command pool.
+    VkCommandPoolCreateInfo command_pool_create_info{};
+    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_create_info.queueFamilyIndex = indicies.graphics_family.value();
+    command_pool_create_info.flags = 0;
+
+    VK_CHECK(vkCreateCommandPool(vk_device_, &command_pool_create_info, nullptr, &vk_command_pool_));
 }
 
 /**
@@ -1203,6 +1502,9 @@ void application::init_vulkan()
  */
 void application::shutdown_vulkan()
 {
+    vkDestroyCommandPool(vk_device_, vk_command_pool_, nullptr);
+    vk_command_pool_ = VK_NULL_HANDLE;
+
     for (size_t i = 0; i < max_frames_in_flight_; i++)
     {
         vkDestroySemaphore(vk_device_, vk_finished_render_semaphores_[i], nullptr);
