@@ -9,6 +9,7 @@ include_directories("external/vulkan/include")
 include_directories("external/glfw/include")
 include_directories("external/glm")
 include_directories("external/assimp/include")
+include_directories("external/assimp/contrib/stb")
 
 add_subdirectory("external/glfw")
 add_subdirectory("external/assimp")
