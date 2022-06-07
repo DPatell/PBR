@@ -16,6 +16,11 @@ add_subdirectory("external/assimp")
 
 link_directories("external/vulkan/lib")
 
-add_executable(PBR src/sandbox/main.cpp)
+file(GLOB PBR_SANDBOX_SOURCES
+        src/sandbox/*.hpp
+        src/sandbox/*.cpp
+)
+
+add_executable(PBR ${PBR_SANDBOX_SOURCES})
 
 target_link_libraries(PBR glfw vulkan-1)
