@@ -100,14 +100,14 @@ void vulkan_utils::create_image_2d(const renderer_context& renderer_context,
     VK_CHECK(vkBindImageMemory(renderer_context.vk_device_, image, device_memory, 0));
 }
 
-VkImageView vulkan_utils::create_image_2d_view(const renderer_context& renderer_context, VkImage image, VkFormat format)
+VkImageView vulkan_utils::create_image_2d_view(const renderer_context& renderer_context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags)
 {
     VkImageViewCreateInfo image_view_create_info{};
     image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     image_view_create_info.image = image;
     image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
     image_view_create_info.format = format;
-    image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    image_view_create_info.subresourceRange.aspectMask = aspect_flags;
     image_view_create_info.subresourceRange.baseMipLevel = 0;
     image_view_create_info.subresourceRange.levelCount = 1;
     image_view_create_info.subresourceRange.baseArrayLayer = 0;
@@ -180,7 +180,7 @@ void vulkan_utils::copy_buffer_to_image(const renderer_context& renderer_context
     end_single_time_commands(renderer_context, command_buffer);
 }
 
-void vulkan_utils::transition_image_layout(const renderer_context& renderer_context, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout)
+void vulkan_utils::transition_image_layout(const renderer_context& renderer_context, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout)
 {
     VkCommandBuffer command_buffer = begin_single_time_commands(renderer_context);
 
@@ -199,6 +199,19 @@ void vulkan_utils::transition_image_layout(const renderer_context& renderer_cont
     image_memory_barrier.subresourceRange.baseArrayLayer = 0;
     image_memory_barrier.subresourceRange.layerCount = 1;
 
+    if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    {
+        image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (has_stencil_component(format))
+        {
+            image_memory_barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    }
+    else
+    {
+        image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+
     VkPipelineStageFlags src_pipeline_stage_flags;
     VkPipelineStageFlags dst_pipeline_stage_flags;
 
@@ -209,6 +222,14 @@ void vulkan_utils::transition_image_layout(const renderer_context& renderer_cont
 
         src_pipeline_stage_flags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dst_pipeline_stage_flags = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+    else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+    {
+        image_memory_barrier.srcAccessMask = 0;
+        image_memory_barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        src_pipeline_stage_flags = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dst_pipeline_stage_flags = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     }
     else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
     {
@@ -227,6 +248,12 @@ void vulkan_utils::transition_image_layout(const renderer_context& renderer_cont
 
     end_single_time_commands(renderer_context, command_buffer);
 }
+
+bool vulkan_utils::has_stencil_component(VkFormat format)
+{
+    return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+}
+
 
 VkCommandBuffer vulkan_utils::begin_single_time_commands(const renderer_context& renderer_context)
 {

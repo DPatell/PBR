@@ -9,15 +9,20 @@
 #include <vector>
 
 const std::vector<vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
 };
 
 const std::vector<uint16_t> indices = {
-    0, 1, 2,
-    2, 3, 0,
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4
 };
 
 /**
@@ -57,7 +62,7 @@ std::array<VkVertexInputAttributeDescription, 3> vertex::get_vertex_input_attrib
 
     vertex_input_attribute_descriptions[0].binding = 0;
     vertex_input_attribute_descriptions[0].location = 0;
-    vertex_input_attribute_descriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    vertex_input_attribute_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     vertex_input_attribute_descriptions[0].offset = offsetof(vertex, position);
 
     vertex_input_attribute_descriptions[1].binding = 0;
@@ -245,19 +250,19 @@ void render_data::create_image(const std::string& path)
                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_texture_image_, vk_texture_image_memory_);
 
     // NOTE(dhaval): Prepare image for transfer
-    vulkan_utils::transition_image_layout(renderer_context_, vk_texture_image_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    vulkan_utils::transition_image_layout(renderer_context_, vk_texture_image_, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     // NOTE(dhaval): Copy to the image memory on GPU
     vulkan_utils::copy_buffer_to_image(renderer_context_, staging_buffer, vk_texture_image_, texture_width, texture_height);
 
     // NOTE(dhaval): Prepare the image for shader access
-    vulkan_utils::transition_image_layout(renderer_context_, vk_texture_image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    vulkan_utils::transition_image_layout(renderer_context_, vk_texture_image_, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // NOTE(dhaval): Destroy staging buffer
     vkDestroyBuffer(renderer_context_.vk_device_, staging_buffer, nullptr);
     vkFreeMemory(renderer_context_.vk_device_, staging_buffer_memory, nullptr);
 
     // NOTE(dhaval): Create image view & sampler
-    vk_texture_image_view_ = vulkan_utils::create_image_2d_view(renderer_context_, vk_texture_image_, format);
+    vk_texture_image_view_ = vulkan_utils::create_image_2d_view(renderer_context_, vk_texture_image_, format, VK_IMAGE_ASPECT_COLOR_BIT);
     vk_texture_image_sampler_ = vulkan_utils::create_sampler(renderer_context_);
 }

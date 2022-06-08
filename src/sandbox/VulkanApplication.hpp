@@ -67,6 +67,8 @@ private:
     SwapchainSettings select_optimal_swapchain_settings(const SwapchainSupportDetails& swapchain_support_details) const;
     queue_family_indicies fetch_queue_family_indicies(VkPhysicalDevice physical_device) const;
     VkPhysicalDevice pick_physical_device(const std::vector<VkPhysicalDevice>& physical_devices, VkSurfaceKHR surface_khr) const;
+    VkFormat select_optimal_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags feature_flags) const;
+    VkFormat select_optimal_depth_format() const;
 
     void init_vulkan();
     void shutdown_vulkan();
@@ -97,6 +99,12 @@ private:
 
     VkFormat vk_swapchain_image_format_;
     VkExtent2D vk_swapchain_extent_2d_;
+
+    VkImage vk_depth_image_;
+    VkImageView vk_depth_image_view_;
+    VkDeviceMemory vk_depth_image_memory_;
+
+    VkFormat vk_depth_format_;
 
     VkDescriptorPool vk_descriptor_pool_;
     VkCommandPool vk_command_pool_{VK_NULL_HANDLE};

@@ -16,7 +16,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     // NOTE(dhaval): Create Uniform buffers
     VkDeviceSize uniform_buffer_object_size = sizeof(uniform_buffer_object);
 
-    uint32_t image_count = static_cast<uint32_t>(vk_renderer_context_.vk_image_views_.size());
+    uint32_t image_count = static_cast<uint32_t>(vk_renderer_context_.vk_swapchain_image_views_.size());
     vk_uniform_buffers_.resize(image_count);
     vk_uniform_buffers_memory_.resize(image_count);
 
@@ -102,8 +102,19 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     multisample_state_create_info.alphaToCoverageEnable = VK_FALSE;
     multisample_state_create_info.alphaToOneEnable = VK_FALSE;
 
-    // NOTE(dhaval): Create Depth Stencil State. (For later use)
+    // NOTE(dhaval): Create Depth Stencil State.
     VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info{};
+    depth_stencil_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_stencil_state_create_info.depthTestEnable = VK_TRUE;
+    depth_stencil_state_create_info.depthWriteEnable = VK_TRUE;
+    depth_stencil_state_create_info.depthCompareOp = VK_COMPARE_OP_LESS;
+    depth_stencil_state_create_info.depthBoundsTestEnable = VK_FALSE;
+    depth_stencil_state_create_info.minDepthBounds = 0.0f;
+    depth_stencil_state_create_info.maxDepthBounds = 1.0f;
+    depth_stencil_state_create_info.stencilTestEnable = VK_FALSE;
+    depth_stencil_state_create_info.front = {};
+    depth_stencil_state_create_info.back = {};
+
 
     // NOTE(dhaval): Create Color Blend State.
     VkPipelineColorBlendAttachmentState color_blend_attachment_state{};
@@ -216,7 +227,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
 
     // NOTE(dhaval): Create RenderPass.
     VkAttachmentDescription color_attachment_description{};
-    color_attachment_description.format = vk_renderer_context_.vk_format_;
+    color_attachment_description.format = vk_renderer_context_.vk_color_format_;
     color_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
     color_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -229,10 +240,25 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     color_attachment_reference.attachment = 0;
     color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentDescription depth_attachment_description{};
+    depth_attachment_description.format = vk_renderer_context_.vk_depth_format_;
+    depth_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depth_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_attachment_description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depth_attachment_reference{};
+    depth_attachment_reference.attachment = 1;
+    depth_attachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
     VkSubpassDescription subpass_description{};
     subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass_description.colorAttachmentCount = 1;
     subpass_description.pColorAttachments = &color_attachment_reference;
+    subpass_description.pDepthStencilAttachment = &depth_attachment_reference;
 
     VkSubpassDependency subpass_dependency{};
     subpass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -242,10 +268,11 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     subpass_dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     subpass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
+    std::array<VkAttachmentDescription, 2> attachment_descriptions = {color_attachment_description, depth_attachment_description};
     VkRenderPassCreateInfo render_pass_create_info{};
     render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    render_pass_create_info.attachmentCount = 1;
-    render_pass_create_info.pAttachments = &color_attachment_description;
+    render_pass_create_info.attachmentCount = static_cast<uint32_t>(attachment_descriptions.size());
+    render_pass_create_info.pAttachments = attachment_descriptions.data();
     render_pass_create_info.subpassCount = 1;
     render_pass_create_info.pSubpasses = &subpass_description;
     render_pass_create_info.dependencyCount = 1;
@@ -263,7 +290,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     graphics_pipeline_create_info.pViewportState = &viewport_state_create_info;
     graphics_pipeline_create_info.pRasterizationState = &rasterization_state_create_info;
     graphics_pipeline_create_info.pMultisampleState = &multisample_state_create_info;
-    graphics_pipeline_create_info.pDepthStencilState = nullptr;
+    graphics_pipeline_create_info.pDepthStencilState = &depth_stencil_state_create_info;
     graphics_pipeline_create_info.pColorBlendState = &color_blend_state_create_info;
     graphics_pipeline_create_info.pDynamicState = nullptr;
     graphics_pipeline_create_info.layout = vk_pipeline_layout_;
@@ -278,13 +305,13 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     vk_frame_buffers_.resize(image_count);
     for (size_t i = 0; i < image_count; i++)
     {
-        VkImageView attachments[] = {vk_renderer_context_.vk_image_views_[i]};
+        std::array<VkImageView, 2> attachment_image_views = {vk_renderer_context_.vk_swapchain_image_views_[i], vk_renderer_context_.vk_depth_image_view_};
 
         VkFramebufferCreateInfo framebuffer_create_info{};
         framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebuffer_create_info.renderPass = vk_render_pass_;
-        framebuffer_create_info.attachmentCount = 1;
-        framebuffer_create_info.pAttachments = attachments;
+        framebuffer_create_info.attachmentCount = static_cast<uint32_t>(attachment_image_views.size());
+        framebuffer_create_info.pAttachments = attachment_image_views.data();
         framebuffer_create_info.width = vk_renderer_context_.vk_extent_2d_.width;
         framebuffer_create_info.height = vk_renderer_context_.vk_extent_2d_.height;
         framebuffer_create_info.layers = 1;
@@ -317,11 +344,14 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
         render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         render_pass_begin_info.renderPass = vk_render_pass_;
         render_pass_begin_info.framebuffer = vk_frame_buffers_[i];
+        render_pass_begin_info.renderArea.offset = {0, 0};
         render_pass_begin_info.renderArea.extent = vk_renderer_context_.vk_extent_2d_;
 
-        VkClearValue clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
-        render_pass_begin_info.clearValueCount = 1;
-        render_pass_begin_info.pClearValues = &clear_color;
+        std::array<VkClearValue, 2> clear_values = {};
+        clear_values[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
+        clear_values[1].depthStencil = {1.0f, 0};
+        render_pass_begin_info.clearValueCount = static_cast<uint32_t>(clear_values.size());
+        render_pass_begin_info.pClearValues = clear_values.data();
 
         vkCmdBeginRenderPass(vk_command_buffers_[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(vk_command_buffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_);
@@ -345,7 +375,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
 /**
  * \brief
  * \param image_index
- * \return
+ * \return  
  */
 VkCommandBuffer renderer::render(uint32_t image_index)
 {

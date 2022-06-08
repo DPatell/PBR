@@ -10,6 +10,7 @@ include_directories("external/glfw/include")
 include_directories("external/glm")
 include_directories("external/assimp/include")
 include_directories("external/assimp/contrib/stb")
+include_directories("build/external/assimp/include")
 
 add_subdirectory("external/glfw")
 add_subdirectory("external/assimp")
@@ -23,4 +24,4 @@ file(GLOB PBR_SANDBOX_SOURCES
 
 add_executable(PBR ${PBR_SANDBOX_SOURCES})
 
-target_link_libraries(PBR glfw vulkan-1)
+target_link_libraries(PBR glfw vulkan-1 assimp)

@@ -33,7 +33,7 @@ public:
                                 VkImage& image,
                                 VkDeviceMemory& device_memory);
 
-    static VkImageView create_image_2d_view(const renderer_context& renderer_context, VkImage image, VkFormat format);
+    static VkImageView create_image_2d_view(const renderer_context& renderer_context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags);
 
     static VkSampler create_sampler(const renderer_context& renderer_context);
 
@@ -41,9 +41,10 @@ public:
 
     static void copy_buffer_to_image(const renderer_context& renderer_context, VkBuffer source, VkImage destination, uint32_t width, uint32_t height);
 
-    static void transition_image_layout(const renderer_context& renderer_context, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
+    static void transition_image_layout(const renderer_context& renderer_context, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
 
 private:
+    static bool has_stencil_component(VkFormat format);
     static VkCommandBuffer begin_single_time_commands(const renderer_context& renderer_context);
     static void end_single_time_commands(const renderer_context& renderer_context, VkCommandBuffer command_buffer);
 };

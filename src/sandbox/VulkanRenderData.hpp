@@ -30,7 +30,7 @@ struct uniform_buffer_object
  */
 struct vertex
 {
-    glm::vec2 position;
+    glm::vec3 position;
     glm::vec3 color;
     glm::vec2 uv;
 

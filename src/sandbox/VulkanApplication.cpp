@@ -12,6 +12,10 @@
 #include <set>
 #include <array>
 
+static std::string vertex_shader_path = "D:/PBR/shaders/vertex_shader.spv";
+static std::string fragment_shader_path = "D:/PBR/shaders/fragment_shader.spv";
+static std::string texture_path = "D:/PBR/textures/texture.jpg";
+
 /**
  * \brief Callback Function for our debug messenger that the validation layers use.
  * \param message_severity A bitmask of VkDebugUtilsMessageSeverityFlagBitsEXT specifying which type of event(s) will cause this callback to be called.
@@ -130,14 +134,16 @@ void application::init_renderer()
     context.vk_physical_device_ = vk_physical_device_;
     context.vk_command_pool_ = vk_command_pool_;
     context.vk_descriptor_pool = vk_descriptor_pool_;
-    context.vk_format_ = vk_swapchain_image_format_;
+    context.vk_color_format_ = vk_swapchain_image_format_;
+    context.vk_depth_format_ = vk_depth_format_;
     context.vk_extent_2d_ = vk_swapchain_extent_2d_;
-    context.vk_image_views_ = vk_swapchain_image_views_;
+    context.vk_swapchain_image_views_ = vk_swapchain_image_views_;
+    context.vk_depth_image_view_ = vk_depth_image_view_;
     context.graphics_queue = vk_graphics_queue_;
     context.present_queue = vk_present_queue_;
 
     renderer_ = new renderer(context);
-    renderer_->init("D:/PBR/shaders/vertex_shader.spv", "D:/PBR/shaders/fragment_shader.spv", "D:/PBR/textures/texture.jpg");
+    renderer_->init(vertex_shader_path, fragment_shader_path, texture_path);
 }
 
 /**
@@ -426,6 +432,44 @@ VkPhysicalDevice application::pick_physical_device(const std::vector<VkPhysicalD
 }
 
 /**
+ * \brief 
+ * \param formats 
+ * \param tiling 
+ * \param feature_flags 
+ * \return 
+ */
+VkFormat application::select_optimal_supported_format(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags feature_flags) const
+{
+    for (VkFormat format : formats)
+    {
+        VkFormatProperties format_properties;
+        vkGetPhysicalDeviceFormatProperties(vk_physical_device_, format, &format_properties);
+
+        if (tiling == VK_IMAGE_TILING_LINEAR && (format_properties.linearTilingFeatures & feature_flags) == feature_flags)
+        {
+            return format;
+        }
+
+        if (tiling == VK_IMAGE_TILING_OPTIMAL && (format_properties.optimalTilingFeatures & feature_flags) == feature_flags)
+        {
+            return format;
+        }
+    }
+
+    assert(false, "Cannot find optimal supported format!!!");
+}
+
+/**
+ * \brief 
+ * \return 
+ */
+VkFormat application::select_optimal_depth_format() const
+{
+    return select_optimal_supported_format({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+}
+
+
+/**
  * \brief
  * \param physical_device
  * \param surface_khr
@@ -628,7 +672,7 @@ void application::init_vulkan()
     vkGetDeviceQueue(vk_device_, indicies.present_family.value(), 0, &vk_present_queue_);
     assert(vk_present_queue_ != VK_NULL_HANDLE, "Present Queue could not be retreived");
 
-    // Create Swapchain
+    // NOTE(dhaval): Create Swapchain
     SwapchainSupportDetails swapchain_support_details = fetch_swapchain_support_details(vk_physical_device_, vk_surface_khr_);
     SwapchainSettings swapchain_settings = select_optimal_swapchain_settings(swapchain_support_details);
 
@@ -732,13 +776,27 @@ void application::init_vulkan()
 
     renderer_context renderer_context{};
     renderer_context.vk_device_ = vk_device_;
+    renderer_context.vk_physical_device_ = vk_physical_device_;
+    renderer_context.vk_command_pool_ = vk_command_pool_;
+    renderer_context.graphics_queue = vk_graphics_queue_;
+    renderer_context.present_queue = vk_present_queue_;
 
     // NOTE(dhaval): Create swapchain image views
     vk_swapchain_image_views_.resize(swapchain_image_count);
     for (size_t i = 0; i < vk_swapchain_image_views_.size(); i++)
     {
-        vk_swapchain_image_views_[i] = vulkan_utils::create_image_2d_view(renderer_context, vk_swapchain_images_[i], vk_swapchain_image_format_);
+        vk_swapchain_image_views_[i] = vulkan_utils::create_image_2d_view(renderer_context, vk_swapchain_images_[i], vk_swapchain_image_format_, VK_IMAGE_ASPECT_COLOR_BIT);
     }
+
+    // NOTE(dhaval): Create depth buffer
+    vk_depth_format_ = select_optimal_depth_format();
+
+    vulkan_utils::create_image_2d(renderer_context, vk_swapchain_extent_2d_.width, vk_swapchain_extent_2d_.height, vk_depth_format_, VK_IMAGE_TILING_OPTIMAL,
+                                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_depth_image_, vk_depth_image_memory_);
+
+    // NOTE(dhaval): Create depth buffer image view
+    vk_depth_image_view_ = vulkan_utils::create_image_2d_view(renderer_context, vk_depth_image_, vk_depth_format_, VK_IMAGE_ASPECT_DEPTH_BIT);
+    vulkan_utils::transition_image_layout(renderer_context, vk_depth_image_, vk_depth_format_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
 /**
@@ -762,6 +820,15 @@ void application::shutdown_vulkan()
     vk_finished_render_semaphores_.clear();
     vk_available_image_semaphores_.clear();
     vk_in_flight_fences_.clear();
+
+    vkDestroyImageView(vk_device_, vk_depth_image_view_, nullptr);
+    vk_depth_image_view_ = VK_NULL_HANDLE;
+
+    vkDestroyImage(vk_device_, vk_depth_image_, nullptr);
+    vk_depth_image_ = VK_NULL_HANDLE;
+
+    vkFreeMemory(vk_device_, vk_depth_image_memory_, nullptr);
+    vk_depth_image_memory_ = VK_NULL_HANDLE;
 
     for (auto image_view : vk_swapchain_image_views_)
     {

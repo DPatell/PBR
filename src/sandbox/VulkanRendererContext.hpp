@@ -22,9 +22,11 @@ struct renderer_context
     VkPhysicalDevice vk_physical_device_{VK_NULL_HANDLE};
     VkCommandPool vk_command_pool_{VK_NULL_HANDLE};
     VkDescriptorPool vk_descriptor_pool;
-    VkFormat vk_format_;
+    VkFormat vk_color_format_;
+    VkFormat vk_depth_format_;
     VkExtent2D vk_extent_2d_;
-    std::vector<VkImageView> vk_image_views_;
+    std::vector<VkImageView> vk_swapchain_image_views_;
+    VkImageView vk_depth_image_view_;
 
     VkQueue graphics_queue{VK_NULL_HANDLE};
     VkQueue present_queue{VK_NULL_HANDLE};
