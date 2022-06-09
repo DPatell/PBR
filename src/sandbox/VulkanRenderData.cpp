@@ -4,26 +4,13 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+
 #include <fstream>
 #include <iostream>
 #include <vector>
-
-const std::vector<vertex> vertices = {
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-};
-
-const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4
-};
 
 /**
  * \brief Reads text or binary files.
@@ -80,14 +67,17 @@ std::array<VkVertexInputAttributeDescription, 3> vertex::get_vertex_input_attrib
 
 /**
  * \brief
- * \param vertex_shader_file
- * \param fragment_shader_file
+ * \param vertex_shader_file 
+ * \param fragment_shader_file 
+ * \param texture_file 
+ * \param model_file 
  */
-void render_data::init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file)
+void render_data::init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file, const std::string& model_file)
 {
     vk_vertex_shader_ = create_shader(vertex_shader_file);
     vk_fragment_shader_ = create_shader(fragment_shader_file);
-
+    model = create_model(model_file);
+    
     create_image(texture_file);
     create_vertex_buffer();
     create_index_buffer();
@@ -129,11 +119,6 @@ void render_data::shutdown()
     vk_fragment_shader_ = VK_NULL_HANDLE;
 }
 
-uint32_t render_data::get_number_of_indicies() const
-{
-    return static_cast<uint32_t>(indices.size());
-}
-
 /**
  * \brief
  * \param path
@@ -154,12 +139,86 @@ VkShaderModule render_data::create_shader(const std::string& path) const
     return shader_module;
 }
 
+render_model render_data::create_model(const std::string& path) const
+{
+    Assimp::Importer importer;
+
+    unsigned int flags = aiProcess_CalcTangentSpace | aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_SortByPType;
+    const aiScene* scene = importer.ReadFile(path, flags);
+
+    render_model model;
+    if (!scene)
+    {
+        std::cerr << importer.GetErrorString() << std::endl;
+        return model;
+    }
+
+    if (scene->HasMeshes())
+    {
+        aiMesh* mesh = scene->mMeshes[0];
+        assert(mesh != nullptr, "Mesh is null");
+
+        model.vertices.resize(mesh->mNumVertices);
+        model.indices.resize(mesh->mNumFaces * 3);
+
+        aiVector3D* vertices = mesh->mVertices;
+        for (unsigned int i = 0; i < mesh->mNumVertices; i++)
+        {
+            model.vertices[i].position = glm::vec3(vertices[i].x, vertices[i].y, vertices[i].z);
+        }
+
+        aiVector3D* uvs = mesh->mTextureCoords[0];
+        if (uvs)
+        {
+            for (unsigned int i = 0; i < mesh->mNumVertices; i++)
+            {
+                model.vertices[i].uv = glm::vec2(uvs[i].x, 1.0f - uvs[i].y);
+            }
+        }
+        else
+        {
+            for (unsigned int i = 0; i < mesh->mNumVertices; i++)
+            {
+                model.vertices[i].uv = glm::vec2(0.0f, 0.0f);
+            }
+        }
+
+        aiColor4D* colors = mesh->mColors[0];
+        if (colors)
+        {
+            for (unsigned int i = 0; i < mesh->mNumVertices; i++)
+            {
+                model.vertices[i].color = glm::vec3(colors[i].r, colors[i].g, colors[i].b);
+            }
+        }
+        else
+        {
+            for (unsigned int i = 0; i < mesh->mNumVertices; i++)
+            {
+                model.vertices[i].color = glm::vec3(1.0f, 1.0f, 1.0f);
+            }
+        }
+
+        aiFace* faces = mesh->mFaces;
+        unsigned int index = 0;
+        for (unsigned int i = 0; i < mesh->mNumFaces; i++)
+        {
+            for (unsigned int face_index = 0; face_index < faces[i].mNumIndices; face_index++)
+            {
+                model.indices[index++] = faces[i].mIndices[face_index];
+            }
+        }
+    }
+
+    return model;
+}   
+
 /**
  * \brief
  */
 void render_data::create_vertex_buffer()
 {
-    VkDeviceSize buffer_size = sizeof(vertex) * vertices.size();
+    VkDeviceSize buffer_size = sizeof(vertex) * model.vertices.size();
 
     VkBuffer staging_buffer = VK_NULL_HANDLE;
     VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
@@ -174,7 +233,7 @@ void render_data::create_vertex_buffer()
     // NOTE(dhaval): Fill staging buffer.
     void* data = nullptr;
     VK_CHECK(vkMapMemory(renderer_context_.vk_device_, staging_buffer_memory, 0, buffer_size, 0, &data));
-    memcpy(data, vertices.data(), static_cast<size_t>(buffer_size));
+    memcpy(data, model.vertices.data(), static_cast<size_t>(buffer_size));
     vkUnmapMemory(renderer_context_.vk_device_, staging_buffer_memory);
 
     // NOTE(dhaval): Transfer to GPU local memory.
@@ -190,7 +249,7 @@ void render_data::create_vertex_buffer()
  */
 void render_data::create_index_buffer()
 {
-    VkDeviceSize buffer_size = sizeof(uint16_t) * indices.size();
+    VkDeviceSize buffer_size = sizeof(uint32_t) * model.indices.size();
 
     VkBuffer staging_buffer = VK_NULL_HANDLE;
     VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
@@ -205,7 +264,7 @@ void render_data::create_index_buffer()
     // NOTE(dhaval): Fill staging buffer.
     void* data = nullptr;
     VK_CHECK(vkMapMemory(renderer_context_.vk_device_, staging_buffer_memory, 0, buffer_size, 0, &data));
-    memcpy(data, indices.data(), static_cast<size_t>(buffer_size));
+    memcpy(data, model.indices.data(), static_cast<size_t>(buffer_size));
     vkUnmapMemory(renderer_context_.vk_device_, staging_buffer_memory);
 
     // NOTE(dhaval): Transfer to GPU local memory.

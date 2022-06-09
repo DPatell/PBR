@@ -20,7 +20,7 @@ public:
     {
     }
 
-    void init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file);
+    void init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file, const std::string& model_file);
     VkCommandBuffer render(uint32_t image_index);
     void shutdown();
 

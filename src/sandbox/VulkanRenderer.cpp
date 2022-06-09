@@ -8,10 +8,11 @@
  * \param vertex_shader_file Path to the vertex shader file.
  * \param fragment_shader_file Path to the fragment shader file.
  * \param texture_file
+ * \param model_file
  */
-void renderer::init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file)
+void renderer::init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file, const std::string& model_file)
 {
-    data_.init(vertex_shader_file, fragment_shader_file, texture_file);
+    data_.init(vertex_shader_file, fragment_shader_file, texture_file, model_file);
 
     // NOTE(dhaval): Create Uniform buffers
     VkDeviceSize uniform_buffer_object_size = sizeof(uniform_buffer_object);
@@ -362,7 +363,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
         VkDeviceSize offsets[] = {0};
 
         vkCmdBindVertexBuffers(vk_command_buffers_[i], 0, 1, vertex_buffers, offsets);
-        vkCmdBindIndexBuffer(vk_command_buffers_[i], index_buffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(vk_command_buffers_[i], index_buffer, 0, VK_INDEX_TYPE_UINT32);
 
         vkCmdDrawIndexed(vk_command_buffers_[i], data_.get_number_of_indicies(), 1, 0, 0, 0);
 

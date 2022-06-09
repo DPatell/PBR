@@ -14,7 +14,8 @@
 
 static std::string vertex_shader_path = "D:/PBR/shaders/vertex_shader.spv";
 static std::string fragment_shader_path = "D:/PBR/shaders/fragment_shader.spv";
-static std::string texture_path = "D:/PBR/textures/texture.jpg";
+static std::string texture_path = "D:/PBR/textures/chalet.jpg";
+static std::string model_path = "D:/PBR/models/chalet.obj";
 
 /**
  * \brief Callback Function for our debug messenger that the validation layers use.
@@ -143,7 +144,7 @@ void application::init_renderer()
     context.present_queue = vk_present_queue_;
 
     renderer_ = new renderer(context);
-    renderer_->init(vertex_shader_path, fragment_shader_path, texture_path);
+    renderer_->init(vertex_shader_path, fragment_shader_path, texture_path, model_path);
 }
 
 /**

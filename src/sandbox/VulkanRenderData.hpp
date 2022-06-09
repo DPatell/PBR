@@ -39,6 +39,15 @@ struct vertex
 };
 
 /**
+ * \brief 
+ */
+struct render_model
+{
+    std::vector<vertex> vertices;
+    std::vector<uint32_t> indices;
+};
+
+/**
  * \brief
  */
 class render_data
@@ -48,7 +57,7 @@ public:
     {
     }
 
-    void init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file);
+    void init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file, const std::string& model_file);
     void shutdown();
 
     inline VkShaderModule get_vertex_shader() const { return vk_vertex_shader_; };
@@ -60,9 +69,10 @@ public:
     inline VkImageView get_texture_image_view() const { return vk_texture_image_view_; };
     inline VkSampler get_texture_image_sampler() const { return vk_texture_image_sampler_; };
 
-    uint32_t get_number_of_indicies() const;
+    inline uint32_t get_number_of_indicies() const { return static_cast<uint32_t>(model.indices.size()); };
 private:
     VkShaderModule create_shader(const std::string& path) const;
+    render_model create_model(const std::string& path) const;
 
     void create_vertex_buffer();
     void create_index_buffer();
@@ -70,6 +80,7 @@ private:
     void create_image(const std::string& path);
 private:
     renderer_context renderer_context_;
+    render_model model;
 
     VkShaderModule vk_vertex_shader_{VK_NULL_HANDLE};
     VkShaderModule vk_fragment_shader_{VK_NULL_HANDLE};
