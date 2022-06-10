@@ -1,7 +1,20 @@
+#include "VulkanMesh.hpp"
 #include "VulkanRenderer.hpp"
 #include "VulkanUtils.hpp"
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <chrono>
+
+struct shared_renderer_state
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
+};
 
 /**
  * \brief Initializes the Renderer.
@@ -15,7 +28,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     data_.init(vertex_shader_file, fragment_shader_file, texture_file, model_file);
 
     // NOTE(dhaval): Create Uniform buffers
-    VkDeviceSize uniform_buffer_object_size = sizeof(uniform_buffer_object);
+    VkDeviceSize uniform_buffer_object_size = sizeof(shared_renderer_state);
 
     uint32_t image_count = static_cast<uint32_t>(vk_renderer_context_.vk_swapchain_image_views_.size());
     vk_uniform_buffers_.resize(image_count);
@@ -43,8 +56,8 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     VkPipelineShaderStageCreateInfo shader_stages[] = {vertex_shader_stage_create_info, fragment_shader_stage_create_info};
 
     // NOTE(dhaval): Creating Vertex Input.
-    VkVertexInputBindingDescription vertex_input_binding_description = vertex::get_vertex_input_binding_description();
-    auto vertex_input_attribute_descriptions = vertex::get_vertex_input_attribute_descriptions();
+    VkVertexInputBindingDescription vertex_input_binding_description = vulkan_mesh::get_vertex_input_binding_description();
+    auto vertex_input_attribute_descriptions = vulkan_mesh::get_vertex_input_attribute_descriptions();
 
     VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info{};
     vertex_input_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -188,7 +201,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
         VkDescriptorBufferInfo descriptor_buffer_info{};
         descriptor_buffer_info.buffer = vk_uniform_buffers_[i];
         descriptor_buffer_info.offset = 0;
-        descriptor_buffer_info.range = sizeof(uniform_buffer_object);
+        descriptor_buffer_info.range = sizeof(shared_renderer_state);
 
         VkDescriptorImageInfo descriptor_image_info{};
         descriptor_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -358,14 +371,17 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
         vkCmdBindPipeline(vk_command_buffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_);
         vkCmdBindDescriptorSets(vk_command_buffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_layout_, 0, 1, &vk_descriptor_sets_[i], 0, nullptr);
 
-        VkBuffer vertex_buffers[] = {data_.get_vertex_buffer()};
-        VkBuffer index_buffer = data_.get_index_buffer();
+        const vulkan_mesh& mesh = data_.get_mesh();
+
+        VkBuffer vertex_buffers[] = {mesh.get_vertex_buffer()};
+        VkBuffer index_buffer = mesh.get_index_buffer();
+
         VkDeviceSize offsets[] = {0};
 
         vkCmdBindVertexBuffers(vk_command_buffers_[i], 0, 1, vertex_buffers, offsets);
         vkCmdBindIndexBuffer(vk_command_buffers_[i], index_buffer, 0, VK_INDEX_TYPE_UINT32);
 
-        vkCmdDrawIndexed(vk_command_buffers_[i], data_.get_number_of_indicies(), 1, 0, 0, 0);
+        vkCmdDrawIndexed(vk_command_buffers_[i], mesh.get_num_indices(), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(vk_command_buffers_[i]);
 
@@ -388,11 +404,11 @@ VkCommandBuffer renderer::render(uint32_t image_index)
     VkBuffer uniform_buffer = vk_uniform_buffers_[image_index];
     VkDeviceMemory uniform_buffer_memory = vk_uniform_buffers_memory_[image_index];
 
-    uniform_buffer_object uniform_buffer_object{};
+    shared_renderer_state uniform_buffer_object{};
     uniform_buffer_object.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     uniform_buffer_object.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    uniform_buffer_object.proj = glm::perspective(glm::radians(45.0f), vk_renderer_context_.vk_extent_2d_.width / (float)vk_renderer_context_.vk_extent_2d_.height, 0.1f, 10.0f);
-    uniform_buffer_object.proj[1][1] *= -1;
+    uniform_buffer_object.projection = glm::perspective(glm::radians(45.0f), vk_renderer_context_.vk_extent_2d_.width / (float)vk_renderer_context_.vk_extent_2d_.height, 0.1f, 10.0f);
+    uniform_buffer_object.projection[1][1] *= -1;
 
     void* data;
     vkMapMemory(vk_renderer_context_.vk_device_, uniform_buffer_memory, 0, sizeof(uniform_buffer_object), 0, &data);

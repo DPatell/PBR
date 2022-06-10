@@ -4,10 +4,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include <assimp/Importer.hpp>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
-
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -33,38 +29,6 @@ static std::vector<char> read_file(const std::string& filename)
     return buffer;
 }
 
-VkVertexInputBindingDescription vertex::get_vertex_input_binding_description()
-{
-    VkVertexInputBindingDescription vertex_input_binding_description;
-    vertex_input_binding_description.binding = 0;
-    vertex_input_binding_description.stride = sizeof(vertex);
-    vertex_input_binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    return vertex_input_binding_description;
-}
-
-std::array<VkVertexInputAttributeDescription, 3> vertex::get_vertex_input_attribute_descriptions()
-{
-    std::array<VkVertexInputAttributeDescription, 3> vertex_input_attribute_descriptions = {};
-
-    vertex_input_attribute_descriptions[0].binding = 0;
-    vertex_input_attribute_descriptions[0].location = 0;
-    vertex_input_attribute_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    vertex_input_attribute_descriptions[0].offset = offsetof(vertex, position);
-
-    vertex_input_attribute_descriptions[1].binding = 0;
-    vertex_input_attribute_descriptions[1].location = 1;
-    vertex_input_attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    vertex_input_attribute_descriptions[1].offset = offsetof(vertex, color);
-
-    vertex_input_attribute_descriptions[2].binding = 0;
-    vertex_input_attribute_descriptions[2].location = 2;
-    vertex_input_attribute_descriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-    vertex_input_attribute_descriptions[2].offset = offsetof(vertex, uv);
-
-    return vertex_input_attribute_descriptions;
-}
-
 /**
  * \brief
  * \param vertex_shader_file 
@@ -76,11 +40,9 @@ void render_data::init(const std::string& vertex_shader_file, const std::string&
 {
     vk_vertex_shader_ = create_shader(vertex_shader_file);
     vk_fragment_shader_ = create_shader(fragment_shader_file);
-    model = create_model(model_file);
+    mesh_.load_from_file(model_file);
     
     create_image(texture_file);
-    create_vertex_buffer();
-    create_index_buffer();
 }
 
 /**
@@ -100,23 +62,13 @@ void render_data::shutdown()
     vkFreeMemory(renderer_context_.vk_device_, vk_texture_image_memory_, nullptr);
     vk_texture_image_memory_ = VK_NULL_HANDLE;
 
-    vkDestroyBuffer(renderer_context_.vk_device_, vk_vertex_buffer_, nullptr);
-    vk_vertex_buffer_ = VK_NULL_HANDLE;
-
-    vkFreeMemory(renderer_context_.vk_device_, vk_vertex_buffer_memory_, nullptr);
-    vk_vertex_buffer_memory_ = VK_NULL_HANDLE;
-
-    vkDestroyBuffer(renderer_context_.vk_device_, vk_index_buffer_, nullptr);
-    vk_index_buffer_ = VK_NULL_HANDLE;
-
-    vkFreeMemory(renderer_context_.vk_device_, vk_index_buffer_memory_, nullptr);
-    vk_index_buffer_memory_ = VK_NULL_HANDLE;
-
     vkDestroyShaderModule(renderer_context_.vk_device_, vk_vertex_shader_, nullptr);
     vk_vertex_shader_ = VK_NULL_HANDLE;
 
     vkDestroyShaderModule(renderer_context_.vk_device_, vk_fragment_shader_, nullptr);
     vk_fragment_shader_ = VK_NULL_HANDLE;
+
+    mesh_.clear_gpu_data();
 }
 
 /**
@@ -137,142 +89,6 @@ VkShaderModule render_data::create_shader(const std::string& path) const
     VK_CHECK(vkCreateShaderModule(renderer_context_.vk_device_, &shader_module_create_info, nullptr, &shader_module));
 
     return shader_module;
-}
-
-render_model render_data::create_model(const std::string& path) const
-{
-    Assimp::Importer importer;
-
-    unsigned int flags = aiProcess_CalcTangentSpace | aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_SortByPType;
-    const aiScene* scene = importer.ReadFile(path, flags);
-
-    render_model model;
-    if (!scene)
-    {
-        std::cerr << importer.GetErrorString() << std::endl;
-        return model;
-    }
-
-    if (scene->HasMeshes())
-    {
-        aiMesh* mesh = scene->mMeshes[0];
-        assert(mesh != nullptr, "Mesh is null");
-
-        model.vertices.resize(mesh->mNumVertices);
-        model.indices.resize(mesh->mNumFaces * 3);
-
-        aiVector3D* vertices = mesh->mVertices;
-        for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-        {
-            model.vertices[i].position = glm::vec3(vertices[i].x, vertices[i].y, vertices[i].z);
-        }
-
-        aiVector3D* uvs = mesh->mTextureCoords[0];
-        if (uvs)
-        {
-            for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-            {
-                model.vertices[i].uv = glm::vec2(uvs[i].x, 1.0f - uvs[i].y);
-            }
-        }
-        else
-        {
-            for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-            {
-                model.vertices[i].uv = glm::vec2(0.0f, 0.0f);
-            }
-        }
-
-        aiColor4D* colors = mesh->mColors[0];
-        if (colors)
-        {
-            for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-            {
-                model.vertices[i].color = glm::vec3(colors[i].r, colors[i].g, colors[i].b);
-            }
-        }
-        else
-        {
-            for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-            {
-                model.vertices[i].color = glm::vec3(1.0f, 1.0f, 1.0f);
-            }
-        }
-
-        aiFace* faces = mesh->mFaces;
-        unsigned int index = 0;
-        for (unsigned int i = 0; i < mesh->mNumFaces; i++)
-        {
-            for (unsigned int face_index = 0; face_index < faces[i].mNumIndices; face_index++)
-            {
-                model.indices[index++] = faces[i].mIndices[face_index];
-            }
-        }
-    }
-
-    return model;
-}   
-
-/**
- * \brief
- */
-void render_data::create_vertex_buffer()
-{
-    VkDeviceSize buffer_size = sizeof(vertex) * model.vertices.size();
-
-    VkBuffer staging_buffer = VK_NULL_HANDLE;
-    VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
-
-    vulkan_utils::create_buffer(renderer_context_, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_vertex_buffer_,
-                                vk_vertex_buffer_memory_);
-
-    // NOTE(dhaval): Create staging buffer.
-    vulkan_utils::create_buffer(renderer_context_, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, staging_buffer,
-                                staging_buffer_memory);
-
-    // NOTE(dhaval): Fill staging buffer.
-    void* data = nullptr;
-    VK_CHECK(vkMapMemory(renderer_context_.vk_device_, staging_buffer_memory, 0, buffer_size, 0, &data));
-    memcpy(data, model.vertices.data(), static_cast<size_t>(buffer_size));
-    vkUnmapMemory(renderer_context_.vk_device_, staging_buffer_memory);
-
-    // NOTE(dhaval): Transfer to GPU local memory.
-    vulkan_utils::copy_buffer(renderer_context_, staging_buffer, vk_vertex_buffer_, buffer_size);
-
-    // NOTE(dhaval): Destroy staging buffer.
-    vkDestroyBuffer(renderer_context_.vk_device_, staging_buffer, nullptr);
-    vkFreeMemory(renderer_context_.vk_device_, staging_buffer_memory, nullptr);
-}
-
-/**
- * \brief
- */
-void render_data::create_index_buffer()
-{
-    VkDeviceSize buffer_size = sizeof(uint32_t) * model.indices.size();
-
-    VkBuffer staging_buffer = VK_NULL_HANDLE;
-    VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
-
-    vulkan_utils::create_buffer(renderer_context_, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_index_buffer_,
-                                vk_index_buffer_memory_);
-
-    // NOTE(dhaval): Create staging buffer.
-    vulkan_utils::create_buffer(renderer_context_, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, staging_buffer,
-                                staging_buffer_memory);
-
-    // NOTE(dhaval): Fill staging buffer.
-    void* data = nullptr;
-    VK_CHECK(vkMapMemory(renderer_context_.vk_device_, staging_buffer_memory, 0, buffer_size, 0, &data));
-    memcpy(data, model.indices.data(), static_cast<size_t>(buffer_size));
-    vkUnmapMemory(renderer_context_.vk_device_, staging_buffer_memory);
-
-    // NOTE(dhaval): Transfer to GPU local memory.
-    vulkan_utils::copy_buffer(renderer_context_, staging_buffer, vk_index_buffer_, buffer_size);
-
-    // NOTE(dhaval): Destroy staging buffer.
-    vkDestroyBuffer(renderer_context_.vk_device_, staging_buffer, nullptr);
-    vkFreeMemory(renderer_context_.vk_device_, staging_buffer_memory, nullptr);
 }
 
 void render_data::create_image(const std::string& path)
