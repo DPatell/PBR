@@ -1,7 +1,5 @@
 #pragma once
 
-#define NOMINMAX
-#define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 
 #define GLM_FORCE_RADIANS
@@ -18,7 +16,7 @@
 class vulkan_mesh
 {
 public:
-    vulkan_mesh(const renderer_context& renderer_context) : vk_renderer_context_(renderer_context)
+    vulkan_mesh(const vulkan_renderer_context& renderer_context) : vk_renderer_context_(renderer_context)
     {
     }
 
@@ -42,7 +40,7 @@ private:
     void create_index_buffer();
 
 private:
-    renderer_context vk_renderer_context_;
+    vulkan_renderer_context vk_renderer_context_;
 
     struct vertex
     {

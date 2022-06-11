@@ -1,8 +1,5 @@
 #pragma once
 
-#define NOMINMAX
-#define VK_USE_PLATFORM_WIN32_KHR
-
 #include <vulkan/vulkan.h>
 
 #include <vector>
@@ -16,7 +13,7 @@
 /**
  * \brief Structure that stores the varaibles that the renderer may need.
  */
-struct renderer_context
+struct vulkan_renderer_context
 {
     VkDevice vk_device_{VK_NULL_HANDLE};
     VkPhysicalDevice vk_physical_device_{VK_NULL_HANDLE};

@@ -94,24 +94,24 @@ private:
     VkQueue vk_present_queue_{VK_NULL_HANDLE};
 
     VkSwapchainKHR vk_swapchain_khr_{VK_NULL_HANDLE};
-    std::vector<VkImage> vk_swapchain_images_;
-    std::vector<VkImageView> vk_swapchain_image_views_;
+    std::vector<VkImage> vk_swapchain_images_{VK_NULL_HANDLE};
+    std::vector<VkImageView> vk_swapchain_image_views_{VK_NULL_HANDLE};
 
     VkFormat vk_swapchain_image_format_;
     VkExtent2D vk_swapchain_extent_2d_;
 
-    VkImage vk_depth_image_;
-    VkImageView vk_depth_image_view_;
-    VkDeviceMemory vk_depth_image_memory_;
+    VkImage vk_depth_image_{VK_NULL_HANDLE};
+    VkImageView vk_depth_image_view_{VK_NULL_HANDLE};
+    VkDeviceMemory vk_depth_image_memory_{VK_NULL_HANDLE};
 
     VkFormat vk_depth_format_;
 
-    VkDescriptorPool vk_descriptor_pool_;
+    VkDescriptorPool vk_descriptor_pool_{VK_NULL_HANDLE};
     VkCommandPool vk_command_pool_{VK_NULL_HANDLE};
 
-    std::vector<VkSemaphore> vk_available_image_semaphores_;
-    std::vector<VkSemaphore> vk_finished_render_semaphores_;
-    std::vector<VkFence> vk_in_flight_fences_;
+    std::vector<VkSemaphore> vk_available_image_semaphores_{VK_NULL_HANDLE};
+    std::vector<VkSemaphore> vk_finished_render_semaphores_{VK_NULL_HANDLE};
+    std::vector<VkFence> vk_in_flight_fences_{VK_NULL_HANDLE};
     size_t current_frame_{0};
 
     VkDebugUtilsMessengerEXT vk_debug_utils_messenger_{VK_NULL_HANDLE};

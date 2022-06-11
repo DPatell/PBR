@@ -3,15 +3,15 @@
 
 /**
  * \brief
- * \param renderer_context
+ * \param vk_renderer_context
  * \param type_filter
  * \param memory_property_flags
  * \return
  */
-uint32_t vulkan_utils::find_memory_type(const renderer_context& renderer_context, uint32_t type_filter, VkMemoryPropertyFlags memory_property_flags)
+uint32_t vulkan_utils::find_memory_type(const vulkan_renderer_context& vk_renderer_context, uint32_t type_filter, VkMemoryPropertyFlags memory_property_flags)
 {
     VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
-    vkGetPhysicalDeviceMemoryProperties(renderer_context.vk_physical_device_, &physical_device_memory_properties);
+    vkGetPhysicalDeviceMemoryProperties(vk_renderer_context.vk_physical_device_, &physical_device_memory_properties);
 
     for (uint32_t i = 0; i < physical_device_memory_properties.memoryTypeCount; i++)
     {
@@ -25,7 +25,7 @@ uint32_t vulkan_utils::find_memory_type(const renderer_context& renderer_context
     assert(false, "Can't find suitable memory type");
 }
 
-void vulkan_utils::create_buffer(const renderer_context& renderer_context,
+void vulkan_utils::create_buffer(const vulkan_renderer_context& vk_renderer_context,
                                  VkDeviceSize device_size,
                                  VkBufferUsageFlags buffer_usage_flags,
                                  VkMemoryPropertyFlags memory_property_flags,
@@ -39,24 +39,24 @@ void vulkan_utils::create_buffer(const renderer_context& renderer_context,
     buffer_create_info.usage = buffer_usage_flags;
     buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VK_CHECK(vkCreateBuffer(renderer_context.vk_device_, &buffer_create_info, nullptr, &buffer));
+    VK_CHECK(vkCreateBuffer(vk_renderer_context.vk_device_, &buffer_create_info, nullptr, &buffer));
 
     // NOTE(dhaval): Allocate memory for the buffer.
     VkMemoryRequirements memory_requirements{};
-    vkGetBufferMemoryRequirements(renderer_context.vk_device_, buffer, &memory_requirements);
+    vkGetBufferMemoryRequirements(vk_renderer_context.vk_device_, buffer, &memory_requirements);
 
     VkMemoryAllocateInfo memory_allocate_info{};
     memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memory_allocate_info.allocationSize = memory_requirements.size;
-    memory_allocate_info.memoryTypeIndex = find_memory_type(renderer_context, memory_requirements.memoryTypeBits, memory_property_flags);
+    memory_allocate_info.memoryTypeIndex = find_memory_type(vk_renderer_context, memory_requirements.memoryTypeBits, memory_property_flags);
 
-    VK_CHECK(vkAllocateMemory(renderer_context.vk_device_, &memory_allocate_info, nullptr, &memory));
+    VK_CHECK(vkAllocateMemory(vk_renderer_context.vk_device_, &memory_allocate_info, nullptr, &memory));
 
     // NOTE(dhaval): Bind the buffer
-    VK_CHECK(vkBindBufferMemory(renderer_context.vk_device_, buffer, memory, 0));
+    VK_CHECK(vkBindBufferMemory(vk_renderer_context.vk_device_, buffer, memory, 0));
 }
 
-void vulkan_utils::create_image_2d(const renderer_context& renderer_context,
+void vulkan_utils::create_image_2d(const vulkan_renderer_context& vk_renderer_context,
                                    uint32_t width,
                                    uint32_t height,
                                    VkFormat format,
@@ -83,24 +83,24 @@ void vulkan_utils::create_image_2d(const renderer_context& renderer_context,
     image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_create_info.flags = 0;
 
-    VK_CHECK(vkCreateImage(renderer_context.vk_device_, &image_create_info, nullptr, &image));
+    VK_CHECK(vkCreateImage(vk_renderer_context.vk_device_, &image_create_info, nullptr, &image));
 
     // NOTE(dhaval): Allocate memory for buffer
     VkMemoryRequirements memory_requirements{};
-    vkGetImageMemoryRequirements(renderer_context.vk_device_, image, &memory_requirements);
+    vkGetImageMemoryRequirements(vk_renderer_context.vk_device_, image, &memory_requirements);
 
     VkMemoryAllocateInfo memory_allocate_info{};
     memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memory_allocate_info.allocationSize = memory_requirements.size;
-    memory_allocate_info.memoryTypeIndex = find_memory_type(renderer_context, memory_requirements.memoryTypeBits, memory_property_flags);
+    memory_allocate_info.memoryTypeIndex = find_memory_type(vk_renderer_context, memory_requirements.memoryTypeBits, memory_property_flags);
 
-    VK_CHECK(vkAllocateMemory(renderer_context.vk_device_, &memory_allocate_info, nullptr, &device_memory));
+    VK_CHECK(vkAllocateMemory(vk_renderer_context.vk_device_, &memory_allocate_info, nullptr, &device_memory));
 
     // NOTE(dhaval): Bind buffer
-    VK_CHECK(vkBindImageMemory(renderer_context.vk_device_, image, device_memory, 0));
+    VK_CHECK(vkBindImageMemory(vk_renderer_context.vk_device_, image, device_memory, 0));
 }
 
-VkImageView vulkan_utils::create_image_2d_view(const renderer_context& renderer_context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags)
+VkImageView vulkan_utils::create_image_2d_view(const vulkan_renderer_context& vk_renderer_context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags)
 {
     VkImageViewCreateInfo image_view_create_info{};
     image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -114,12 +114,12 @@ VkImageView vulkan_utils::create_image_2d_view(const renderer_context& renderer_
     image_view_create_info.subresourceRange.layerCount = 1;
 
     VkImageView image_view;
-    VK_CHECK(vkCreateImageView(renderer_context.vk_device_, &image_view_create_info, nullptr, &image_view));
+    VK_CHECK(vkCreateImageView(vk_renderer_context.vk_device_, &image_view_create_info, nullptr, &image_view));
 
     return image_view;
 }
 
-VkSampler vulkan_utils::create_sampler(const renderer_context& renderer_context)
+VkSampler vulkan_utils::create_sampler(const vulkan_renderer_context& vk_renderer_context)
 {
     VkSamplerCreateInfo sampler_create_info{};
     sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -140,25 +140,25 @@ VkSampler vulkan_utils::create_sampler(const renderer_context& renderer_context)
     sampler_create_info.maxLod = 0.0f;
 
     VkSampler sampler = VK_NULL_HANDLE;
-    VK_CHECK(vkCreateSampler(renderer_context.vk_device_, &sampler_create_info, nullptr, &sampler));
+    VK_CHECK(vkCreateSampler(vk_renderer_context.vk_device_, &sampler_create_info, nullptr, &sampler));
 
     return sampler;
 }
 
-void vulkan_utils::copy_buffer(const renderer_context& renderer_context, VkBuffer source, VkBuffer destination, VkDeviceSize device_size)
+void vulkan_utils::copy_buffer(const vulkan_renderer_context& vk_renderer_context, VkBuffer source, VkBuffer destination, VkDeviceSize device_size)
 {
-    VkCommandBuffer command_buffer = begin_single_time_commands(renderer_context);
+    VkCommandBuffer command_buffer = begin_single_time_commands(vk_renderer_context);
 
     VkBufferCopy buffer_copy{};
     buffer_copy.size = device_size;
     vkCmdCopyBuffer(command_buffer, source, destination, 1, &buffer_copy);
 
-    end_single_time_commands(renderer_context, command_buffer);
+    end_single_time_commands(vk_renderer_context, command_buffer);
 }
 
-void vulkan_utils::copy_buffer_to_image(const renderer_context& renderer_context, VkBuffer source, VkImage destination, uint32_t width, uint32_t height)
+void vulkan_utils::copy_buffer_to_image(const vulkan_renderer_context& vk_renderer_context, VkBuffer source, VkImage destination, uint32_t width, uint32_t height)
 {
-    VkCommandBuffer command_buffer = begin_single_time_commands(renderer_context);
+    VkCommandBuffer command_buffer = begin_single_time_commands(vk_renderer_context);
 
     VkBufferImageCopy buffer_image_copy{};
     buffer_image_copy.bufferOffset = 0;
@@ -177,12 +177,12 @@ void vulkan_utils::copy_buffer_to_image(const renderer_context& renderer_context
 
     vkCmdCopyBufferToImage(command_buffer, source, destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_image_copy);
 
-    end_single_time_commands(renderer_context, command_buffer);
+    end_single_time_commands(vk_renderer_context, command_buffer);
 }
 
-void vulkan_utils::transition_image_layout(const renderer_context& renderer_context, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout)
+void vulkan_utils::transition_image_layout(const vulkan_renderer_context& vk_renderer_context, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout)
 {
-    VkCommandBuffer command_buffer = begin_single_time_commands(renderer_context);
+    VkCommandBuffer command_buffer = begin_single_time_commands(vk_renderer_context);
 
     VkImageMemoryBarrier image_memory_barrier{};
     image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -246,7 +246,7 @@ void vulkan_utils::transition_image_layout(const renderer_context& renderer_cont
 
     vkCmdPipelineBarrier(command_buffer, src_pipeline_stage_flags, dst_pipeline_stage_flags, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
 
-    end_single_time_commands(renderer_context, command_buffer);
+    end_single_time_commands(vk_renderer_context, command_buffer);
 }
 
 bool vulkan_utils::has_stencil_component(VkFormat format)
@@ -255,16 +255,16 @@ bool vulkan_utils::has_stencil_component(VkFormat format)
 }
 
 
-VkCommandBuffer vulkan_utils::begin_single_time_commands(const renderer_context& renderer_context)
+VkCommandBuffer vulkan_utils::begin_single_time_commands(const vulkan_renderer_context& vk_renderer_context)
 {
     VkCommandBufferAllocateInfo command_buffer_allocate_info{};
     command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    command_buffer_allocate_info.commandPool = renderer_context.vk_command_pool_;
+    command_buffer_allocate_info.commandPool = vk_renderer_context.vk_command_pool_;
     command_buffer_allocate_info.commandBufferCount = 1;
 
     VkCommandBuffer command_buffer;
-    VK_CHECK(vkAllocateCommandBuffers(renderer_context.vk_device_, &command_buffer_allocate_info, &command_buffer));
+    VK_CHECK(vkAllocateCommandBuffers(vk_renderer_context.vk_device_, &command_buffer_allocate_info, &command_buffer));
 
     VkCommandBufferBeginInfo command_buffer_begin_info{};
     command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -275,7 +275,7 @@ VkCommandBuffer vulkan_utils::begin_single_time_commands(const renderer_context&
     return command_buffer;
 }
 
-void vulkan_utils::end_single_time_commands(const renderer_context& renderer_context, VkCommandBuffer command_buffer)
+void vulkan_utils::end_single_time_commands(const vulkan_renderer_context& vk_renderer_context, VkCommandBuffer command_buffer)
 {
     VK_CHECK(vkEndCommandBuffer(command_buffer));
 
@@ -284,8 +284,8 @@ void vulkan_utils::end_single_time_commands(const renderer_context& renderer_con
     submit_info.commandBufferCount = 1;
     submit_info.pCommandBuffers = &command_buffer;
 
-    VK_CHECK(vkQueueSubmit(renderer_context.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
-    VK_CHECK(vkQueueWaitIdle(renderer_context.graphics_queue));
+    VK_CHECK(vkQueueSubmit(vk_renderer_context.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
+    VK_CHECK(vkQueueWaitIdle(vk_renderer_context.graphics_queue));
 
-    vkFreeCommandBuffers(renderer_context.vk_device_, renderer_context.vk_command_pool_, 1, &command_buffer);
+    vkFreeCommandBuffers(vk_renderer_context.vk_device_, vk_renderer_context.vk_command_pool_, 1, &command_buffer);
 }

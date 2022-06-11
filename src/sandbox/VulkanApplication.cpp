@@ -1,7 +1,6 @@
 #include "VulkanApplication.hpp"
 #include "VulkanRenderer.hpp"
 #include "VulkanRendererContext.hpp"
-#include "VulkanRenderData.hpp"
 #include "VulkanUtils.hpp"
 
 #define GLFW_EXPOSE_NATIVE_WIN32
@@ -130,7 +129,7 @@ void application::shutdown_window()
  */
 void application::init_renderer()
 {
-    renderer_context context = {};
+    vulkan_renderer_context context = {};
     context.vk_device_ = vk_device_;
     context.vk_physical_device_ = vk_physical_device_;
     context.vk_command_pool_ = vk_command_pool_;
@@ -775,7 +774,7 @@ void application::init_vulkan()
         VK_CHECK(vkCreateFence(vk_device_, &fence_create_info, nullptr, &vk_in_flight_fences_[i]));
     }
 
-    renderer_context renderer_context{};
+    vulkan_renderer_context renderer_context{};
     renderer_context.vk_device_ = vk_device_;
     renderer_context.vk_physical_device_ = vk_physical_device_;
     renderer_context.vk_command_pool_ = vk_command_pool_;

@@ -1,12 +1,10 @@
 #pragma once
 
-#define NOMINMAX
-#define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 
 #include <cassert>
 
-struct renderer_context;
+struct vulkan_renderer_context;
 
 /**
  * \brief
@@ -14,16 +12,16 @@ struct renderer_context;
 class vulkan_utils
 {
 public:
-    static uint32_t find_memory_type(const renderer_context& renderer_context, uint32_t type_filter, VkMemoryPropertyFlags memory_property_flags);
+    static uint32_t find_memory_type(const vulkan_renderer_context& vk_renderer_context, uint32_t type_filter, VkMemoryPropertyFlags memory_property_flags);
 
-    static void create_buffer(const renderer_context& renderer_context,
+    static void create_buffer(const vulkan_renderer_context& vk_renderer_context,
                               VkDeviceSize device_size,
                               VkBufferUsageFlags buffer_usage_flags,
                               VkMemoryPropertyFlags memory_property_flags,
                               VkBuffer& buffer,
                               VkDeviceMemory& memory);
 
-    static void create_image_2d(const renderer_context& renderer_context,
+    static void create_image_2d(const vulkan_renderer_context& vk_renderer_context,
                                 uint32_t width,
                                 uint32_t height,
                                 VkFormat format,
@@ -33,18 +31,18 @@ public:
                                 VkImage& image,
                                 VkDeviceMemory& device_memory);
 
-    static VkImageView create_image_2d_view(const renderer_context& renderer_context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags);
+    static VkImageView create_image_2d_view(const vulkan_renderer_context& vk_renderer_context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags);
 
-    static VkSampler create_sampler(const renderer_context& renderer_context);
+    static VkSampler create_sampler(const vulkan_renderer_context& vk_renderer_context);
 
-    static void copy_buffer(const renderer_context& renderer_context, VkBuffer source, VkBuffer destination, VkDeviceSize device_size);
+    static void copy_buffer(const vulkan_renderer_context& vk_renderer_context, VkBuffer source, VkBuffer destination, VkDeviceSize device_size);
 
-    static void copy_buffer_to_image(const renderer_context& renderer_context, VkBuffer source, VkImage destination, uint32_t width, uint32_t height);
+    static void copy_buffer_to_image(const vulkan_renderer_context& vk_renderer_context, VkBuffer source, VkImage destination, uint32_t width, uint32_t height);
 
-    static void transition_image_layout(const renderer_context& renderer_context, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
+    static void transition_image_layout(const vulkan_renderer_context& vk_renderer_context, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
 
 private:
     static bool has_stencil_component(VkFormat format);
-    static VkCommandBuffer begin_single_time_commands(const renderer_context& renderer_context);
-    static void end_single_time_commands(const renderer_context& renderer_context, VkCommandBuffer command_buffer);
+    static VkCommandBuffer begin_single_time_commands(const vulkan_renderer_context& vk_renderer_context);
+    static void end_single_time_commands(const vulkan_renderer_context& vk_renderer_context, VkCommandBuffer command_buffer);
 };

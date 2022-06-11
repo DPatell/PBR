@@ -11,9 +11,6 @@
 
 #include "VulkanApplication.hpp"
 #include "VulkanRenderer.hpp"
-#include "VulkanRendererContext.hpp"
-#include "VulkanRenderData.hpp"
-#include "VulkanUtils.hpp"
 
 #include <GLFW/glfw3.h>
 

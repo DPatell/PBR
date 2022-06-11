@@ -1,8 +1,5 @@
 #pragma once
 
-#define NOMINMAX
-#define VK_USE_PLATFORM_WIN32_KHR
-
 #include <vulkan/vulkan.h>
 
 #include <string>
@@ -13,10 +10,10 @@
 /**
  * \brief
  */
-class render_data
+class render_scene
 {
 public:
-    render_data(const renderer_context& renderer_context) : renderer_context_(renderer_context), mesh_(renderer_context)
+    render_scene(const vulkan_renderer_context& vk_renderer_context) : vk_renderer_context_(vk_renderer_context), mesh_(vk_renderer_context)
     {
     }
 
@@ -38,15 +35,15 @@ private:
 
     void create_image(const std::string& path);
 private:
-    renderer_context renderer_context_;
+    vulkan_renderer_context vk_renderer_context_;
     vulkan_mesh mesh_;
 
     VkShaderModule vk_vertex_shader_{VK_NULL_HANDLE};
     VkShaderModule vk_fragment_shader_{VK_NULL_HANDLE};
 
-    VkImage vk_texture_image_;
-    VkDeviceMemory vk_texture_image_memory_;
+    VkImage vk_texture_image_{VK_NULL_HANDLE};
+    VkDeviceMemory vk_texture_image_memory_{VK_NULL_HANDLE};
 
-    VkImageView vk_texture_image_view_;
-    VkSampler vk_texture_image_sampler_;
+    VkImageView vk_texture_image_view_{VK_NULL_HANDLE};
+    VkSampler vk_texture_image_sampler_{VK_NULL_HANDLE};
 };

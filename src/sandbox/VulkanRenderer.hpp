@@ -1,14 +1,12 @@
 #pragma once
 
-#define NOMINMAX
-#define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 
 #include <string>
 #include <vector>
 
 #include "VulkanRendererContext.hpp"
-#include "VulkanRenderData.hpp"
+#include "RenderScene.hpp"
 
 /**
  * \brief Renderer that the application will create and use.
@@ -16,7 +14,7 @@
 class renderer
 {
 public:
-    renderer(const renderer_context& context) : vk_renderer_context_(context), data_(context)
+    renderer(const vulkan_renderer_context& context) : vk_renderer_context_(context), data_(context)
     {
     }
 
@@ -25,8 +23,8 @@ public:
     void shutdown();
 
 private:
-    render_data data_;
-    renderer_context vk_renderer_context_;
+    render_scene data_;
+    vulkan_renderer_context vk_renderer_context_;
 
     VkRenderPass vk_render_pass_{VK_NULL_HANDLE};
     VkDescriptorSetLayout vk_descriptor_set_layout_{VK_NULL_HANDLE};
