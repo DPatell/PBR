@@ -64,7 +64,7 @@ bool vulkan_mesh::load_from_file(const std::string& path)
     }
 
     aiMesh* mesh = scene->mMeshes[0];
-    assert(mesh != nullptr, "Mesh is null");
+    assert(mesh != nullptr && "Mesh is null");
 
     vertices.resize(mesh->mNumVertices);
     indices.resize(mesh->mNumFaces * 3);

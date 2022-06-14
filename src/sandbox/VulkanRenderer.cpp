@@ -198,6 +198,8 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
 
     for (size_t i = 0; i < image_count; i++)
     {
+        const vulkan_texture& texture = data_.get_texture();
+
         VkDescriptorBufferInfo descriptor_buffer_info{};
         descriptor_buffer_info.buffer = vk_uniform_buffers_[i];
         descriptor_buffer_info.offset = 0;
@@ -205,8 +207,8 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
 
         VkDescriptorImageInfo descriptor_image_info{};
         descriptor_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        descriptor_image_info.imageView = data_.get_texture_image_view();
-        descriptor_image_info.sampler = data_.get_texture_image_sampler();
+        descriptor_image_info.imageView = texture.get_image_view();
+        descriptor_image_info.sampler = texture.get_sampler();
 
         std::array<VkWriteDescriptorSet, 2> write_descriptor_sets{};
 

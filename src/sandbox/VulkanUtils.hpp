@@ -7,7 +7,7 @@
 struct vulkan_renderer_context;
 
 /**
- * \brief
+ * \brief Helper class tha conatains useful functions to create various vulkan structures such as images, samplers, etc.
  */
 class vulkan_utils
 {

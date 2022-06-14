@@ -22,7 +22,7 @@ uint32_t vulkan_utils::find_memory_type(const vulkan_renderer_context& vk_render
         }
     }
 
-    assert(false, "Can't find suitable memory type");
+    assert(false && "Can't find suitable memory type");
 }
 
 void vulkan_utils::create_buffer(const vulkan_renderer_context& vk_renderer_context,
@@ -241,7 +241,7 @@ void vulkan_utils::transition_image_layout(const vulkan_renderer_context& vk_ren
     }
     else
     {
-        assert(false, "Unsupported layout transition");
+        assert(false && "Unsupported layout transition");
     }
 
     vkCmdPipelineBarrier(command_buffer, src_pipeline_stage_flags, dst_pipeline_stage_flags, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);

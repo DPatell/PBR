@@ -285,10 +285,10 @@ bool application::check_required_physical_device_extensions(VkPhysicalDevice phy
 void application::init_vulkan_debug_pfn()
 {
     vk_create_debug_utils_messenger_ = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(vk_instance_, "vkCreateDebugUtilsMessengerEXT"));
-    assert(vk_create_debug_utils_messenger_ != VK_NULL_HANDLE, "Cannot find vkCreateDebugUtilsMessengerEXT function!");
+    assert(vk_create_debug_utils_messenger_ != VK_NULL_HANDLE && "Cannot find vkCreateDebugUtilsMessengerEXT function!");
 
     vk_destroy_debug_utils_messenger_ = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(vk_instance_, "vkDestroyDebugUtilsMessengerEXT"));
-    assert(vk_destroy_debug_utils_messenger_ != VK_NULL_HANDLE, "Cannot find vkCreateDebugUtilsMessengerEXT function!");
+    assert(vk_destroy_debug_utils_messenger_ != VK_NULL_HANDLE && "Cannot find vkCreateDebugUtilsMessengerEXT function!");
 }
 
 /**
@@ -456,7 +456,7 @@ VkFormat application::select_optimal_supported_format(const std::vector<VkFormat
         }
     }
 
-    assert(false, "Cannot find optimal supported format!!!");
+    assert(false && "Cannot find optimal supported format!!!");
 }
 
 /**
@@ -509,8 +509,8 @@ SwapchainSupportDetails application::fetch_swapchain_support_details(VkPhysicalD
  */
 SwapchainSettings application::select_optimal_swapchain_settings(const SwapchainSupportDetails& swapchain_support_details) const
 {
-    assert(!swapchain_support_details.surface_formats.empty(), "Swapchain surface formats were not reteived correctly");
-    assert(!swapchain_support_details.present_modes.empty(), "Swapchain present modes were not reteived correctly");
+    assert(!swapchain_support_details.surface_formats.empty() && "Swapchain surface formats were not reteived correctly");
+    assert(!swapchain_support_details.present_modes.empty() && "Swapchain present modes were not reteived correctly");
 
     SwapchainSettings swapchain_settings;
 
@@ -574,10 +574,10 @@ void application::init_vulkan()
 {
     // NOTE(dhaval): Checking required extensions and layers.
     std::vector<const char*> extensions;
-    assert(check_required_extensions(extensions) != false, "This device does not have the supported extensions");
+    assert(check_required_extensions(extensions) != false && "This device does not have the supported extensions");
 
     std::vector<const char*> layers;
-    assert(check_required_layers(layers) != false, "This device does not have the supported layers");
+    assert(check_required_layers(layers) != false && "This device does not have the supported layers");
 
     // NOTE(dhaval): Create Vulkan Instance.
     VkApplicationInfo application_info{};
@@ -623,13 +623,13 @@ void application::init_vulkan()
     // NOTE(dhaval): Enumerate Physical Devices
     uint32_t physical_device_count = 0;
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance_, &physical_device_count, nullptr));
-    assert(physical_device_count != 0, "Failed to find GPUs that support vulkan!!!");
+    assert(physical_device_count != 0 && "Failed to find GPUs that support vulkan!!!");
 
     std::vector<VkPhysicalDevice> physical_devices(physical_device_count);
     VK_CHECK(vkEnumeratePhysicalDevices(vk_instance_, &physical_device_count, physical_devices.data()));
 
     vk_physical_device_ = pick_physical_device(physical_devices, vk_surface_khr_);
-    assert(vk_physical_device_ != VK_NULL_HANDLE, "Failed to find a suitable GPU!!!");
+    assert(vk_physical_device_ != VK_NULL_HANDLE && "Failed to find a suitable GPU!!!");
 
     // NOTE(dhaval): Create Logical Device.
     queue_family_indicies indicies = fetch_queue_family_indicies(vk_physical_device_);
@@ -667,10 +667,10 @@ void application::init_vulkan()
 
     // NOTE(dhaval): Get Logical Device Queues.
     vkGetDeviceQueue(vk_device_, indicies.graphics_family.value(), 0, &vk_graphics_queue_);
-    assert(vk_graphics_queue_ != VK_NULL_HANDLE, "Graphics Queue could not be retreived");
+    assert(vk_graphics_queue_ != VK_NULL_HANDLE && "Graphics Queue could not be retreived");
 
     vkGetDeviceQueue(vk_device_, indicies.present_family.value(), 0, &vk_present_queue_);
-    assert(vk_present_queue_ != VK_NULL_HANDLE, "Present Queue could not be retreived");
+    assert(vk_present_queue_ != VK_NULL_HANDLE && "Present Queue could not be retreived");
 
     // NOTE(dhaval): Create Swapchain
     SwapchainSupportDetails swapchain_support_details = fetch_swapchain_support_details(vk_physical_device_, vk_surface_khr_);
@@ -722,7 +722,7 @@ void application::init_vulkan()
 
     uint32_t swapchain_image_count = 0;
     vkGetSwapchainImagesKHR(vk_device_, vk_swapchain_khr_, &swapchain_image_count, nullptr);
-    assert(swapchain_image_count != 0, "Zero swapchain images");
+    assert(swapchain_image_count != 0 && "Zero swapchain images");
 
     vk_swapchain_images_.resize(swapchain_image_count);
     vkGetSwapchainImagesKHR(vk_device_, vk_swapchain_khr_, &swapchain_image_count, vk_swapchain_images_.data());
