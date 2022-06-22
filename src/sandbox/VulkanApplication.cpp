@@ -373,11 +373,6 @@ VkPhysicalDevice application::pick_physical_device(const std::vector<VkPhysicalD
             return VK_NULL_HANDLE;
         }
 
-        if (!physical_device_features.samplerAnisotropy)
-        {
-            return VK_NULL_HANDLE;
-        }
-
         if (physical_device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
         {
             std::cout << "Using Discrete GPU: " << physical_device_properties.deviceName << std::endl;
@@ -413,11 +408,6 @@ VkPhysicalDevice application::pick_physical_device(const std::vector<VkPhysicalD
         vkGetPhysicalDeviceFeatures(physical_devices[0], &physical_device_features);
 
         if (!physical_device_features.geometryShader)
-        {
-            return VK_NULL_HANDLE;
-        }
-
-        if (!physical_device_features.samplerAnisotropy)
         {
             return VK_NULL_HANDLE;
         }
@@ -785,18 +775,18 @@ void application::init_vulkan()
     vk_swapchain_image_views_.resize(swapchain_image_count);
     for (size_t i = 0; i < vk_swapchain_image_views_.size(); i++)
     {
-        vk_swapchain_image_views_[i] = vulkan_utils::create_image_2d_view(renderer_context, vk_swapchain_images_[i], vk_swapchain_image_format_, VK_IMAGE_ASPECT_COLOR_BIT);
+        vk_swapchain_image_views_[i] = vulkan_utils::create_image_2d_view(renderer_context, vk_swapchain_images_[i], 1, vk_swapchain_image_format_, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     // NOTE(dhaval): Create depth buffer
     vk_depth_format_ = select_optimal_depth_format();
 
-    vulkan_utils::create_image_2d(renderer_context, vk_swapchain_extent_2d_.width, vk_swapchain_extent_2d_.height, vk_depth_format_, VK_IMAGE_TILING_OPTIMAL,
+    vulkan_utils::create_image_2d(renderer_context, vk_swapchain_extent_2d_.width, vk_swapchain_extent_2d_.height, 1, vk_depth_format_, VK_IMAGE_TILING_OPTIMAL,
                                   VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_depth_image_, vk_depth_image_memory_);
 
     // NOTE(dhaval): Create depth buffer image view
-    vk_depth_image_view_ = vulkan_utils::create_image_2d_view(renderer_context, vk_depth_image_, vk_depth_format_, VK_IMAGE_ASPECT_DEPTH_BIT);
-    vulkan_utils::transition_image_layout(renderer_context, vk_depth_image_, vk_depth_format_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    vk_depth_image_view_ = vulkan_utils::create_image_2d_view(renderer_context, vk_depth_image_, 1, vk_depth_format_, VK_IMAGE_ASPECT_DEPTH_BIT);
+    vulkan_utils::transition_image_layout(renderer_context, vk_depth_image_, 1, vk_depth_format_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
 /**

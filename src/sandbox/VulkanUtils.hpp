@@ -24,6 +24,7 @@ public:
     static void create_image_2d(const vulkan_renderer_context& vk_renderer_context,
                                 uint32_t width,
                                 uint32_t height,
+                                uint32_t mip_levels,
                                 VkFormat format,
                                 VkImageTiling image_tiling,
                                 VkImageUsageFlags image_usage_flags,
@@ -31,15 +32,17 @@ public:
                                 VkImage& image,
                                 VkDeviceMemory& device_memory);
 
-    static VkImageView create_image_2d_view(const vulkan_renderer_context& vk_renderer_context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags);
+    static VkImageView create_image_2d_view(const vulkan_renderer_context& vk_renderer_context, VkImage image, uint32_t mip_levels, VkFormat format, VkImageAspectFlags aspect_flags);
 
-    static VkSampler create_sampler(const vulkan_renderer_context& vk_renderer_context);
+    static VkSampler create_sampler(const vulkan_renderer_context& vk_renderer_context, uint32_t mip_levels);
 
     static void copy_buffer(const vulkan_renderer_context& vk_renderer_context, VkBuffer source, VkBuffer destination, VkDeviceSize device_size);
 
     static void copy_buffer_to_image(const vulkan_renderer_context& vk_renderer_context, VkBuffer source, VkImage destination, uint32_t width, uint32_t height);
 
-    static void transition_image_layout(const vulkan_renderer_context& vk_renderer_context, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
+    static void transition_image_layout(const vulkan_renderer_context& vk_renderer_context, VkImage image, uint32_t mip_levels, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
+
+    static void generate_image_2d_mipmaps(const vulkan_renderer_context& vk_renderer_context, VkImage image, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkFilter filter);
 
 private:
     static bool has_stencil_component(VkFormat format);

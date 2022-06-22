@@ -118,9 +118,10 @@ bool vulkan_mesh::load_from_file(const std::string& path)
     }
 
     // NOTE(dhaval): Upload cpu data to gpu
+    clear_gpu_data();
     upload_to_gpu();
 
-    // TODO(dhaval): clear cpu data?
+    // TODO(dhaval): Should we clear cpu data after uploading it to the GPU?
 
     return true;
 }

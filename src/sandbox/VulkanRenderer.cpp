@@ -401,15 +401,23 @@ VkCommandBuffer renderer::render(uint32_t image_index)
     static auto start_time = std::chrono::high_resolution_clock::now();
     auto current_time = std::chrono::high_resolution_clock::now();
 
+    const float rotation_speed = 0.1f;
     float time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
 
     VkBuffer uniform_buffer = vk_uniform_buffers_[image_index];
     VkDeviceMemory uniform_buffer_memory = vk_uniform_buffers_memory_[image_index];
 
+    const glm::vec3& up = {0.0f, 0.0f, 1.0f};
+    const glm::vec3& zero = {0.0f, 0.0f, 0.0f};
+
+    const float aspect = vk_renderer_context_.vk_extent_2d_.width / (float)vk_renderer_context_.vk_extent_2d_.height;
+    const float z_near = 0.1f;
+    const float z_far = 10.0f;
+
     shared_renderer_state uniform_buffer_object{};
-    uniform_buffer_object.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    uniform_buffer_object.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    uniform_buffer_object.projection = glm::perspective(glm::radians(45.0f), vk_renderer_context_.vk_extent_2d_.width / (float)vk_renderer_context_.vk_extent_2d_.height, 0.1f, 10.0f);
+    uniform_buffer_object.model = glm::rotate(glm::mat4(1.0f), time * rotation_speed * glm::radians(90.0f), up);
+    uniform_buffer_object.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), zero, up);
+    uniform_buffer_object.projection = glm::perspective(glm::radians(45.0f), aspect, z_near, z_far);
     uniform_buffer_object.projection[1][1] *= -1;
 
     void* data;

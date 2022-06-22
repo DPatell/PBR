@@ -32,8 +32,9 @@ private:
     int width_{0};
     int height_{0};
     int channels_{0};
+    int mip_levels_{0};
 
-    VkFormat vk_format{VK_FORMAT_R8G8B8A8_UNORM};
+    VkFormat vk_format_{VK_FORMAT_R8G8B8A8_UNORM};
 
     VkImage vk_image_{VK_NULL_HANDLE};
     VkDeviceMemory vk_image_memory_{VK_NULL_HANDLE};
