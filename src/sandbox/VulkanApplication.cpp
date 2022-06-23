@@ -39,12 +39,6 @@ std::vector<const char*> application::vk_required_physical_device_extensions_ = 
 std::vector<const char*> application::vk_required_validation_layers_ = {"VK_LAYER_KHRONOS_validation",};
 
 /**
- * \brief Function Pointers for our debug messenger functions
- */
-PFN_vkCreateDebugUtilsMessengerEXT application::vk_create_debug_utils_messenger_{VK_NULL_HANDLE};
-PFN_vkDestroyDebugUtilsMessengerEXT application::vk_destroy_debug_utils_messenger_{VK_NULL_HANDLE};
-
-/**
  * \brief Does what the name says. It runs our application. (Manages the creation and destruction of our applications state)
  */
 void application::run()
@@ -62,7 +56,8 @@ void application::render()
 {
     vkWaitForFences(vk_device_, 1, &vk_in_flight_fences_[current_frame_], VK_TRUE, std::numeric_limits<uint64_t>::max());
     vkResetFences(vk_device_, 1, &vk_in_flight_fences_[current_frame_]);
-    uint32_t image_index;
+
+    uint32_t image_index = 0;
     vkAcquireNextImageKHR(vk_device_, vk_swapchain_khr_, std::numeric_limits<uint64_t>::max(), vk_available_image_semaphores_[current_frame_], VK_NULL_HANDLE, &image_index);
 
     VkCommandBuffer command_buffer = renderer_->render(image_index);
@@ -105,14 +100,21 @@ void application::render()
  */
 void application::init_window()
 {
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* video_mode = glfwGetVideoMode(monitor);
+
+    glfwWindowHint(GLFW_RED_BITS, video_mode->redBits);
+    glfwWindowHint(GLFW_GREEN_BITS, video_mode->greenBits);
+    glfwWindowHint(GLFW_BLUE_BITS, video_mode->blueBits);
+    glfwWindowHint(GLFW_REFRESH_RATE, video_mode->refreshRate);
+
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    window_ = glfwCreateWindow(window_width_, window_height_, "Physically Based Rendering", nullptr, nullptr);
-    if (!window_)
-    {
-        return;
-    }
+    window_ = glfwCreateWindow(video_mode->width, video_mode->height, "Physically Based Renderer", monitor, nullptr);
+
+    window_width_ = video_mode->width;
+    window_height_ = video_mode->height;
 }
 
 /**
@@ -276,19 +278,6 @@ bool application::check_required_physical_device_extensions(VkPhysicalDevice phy
     }
 
     return true;
-}
-
-
-/**
- * \brief Retrieves function pointers for the vkCreateDebugUtilsMessengerEXT & vkDestroyDebugUtilsMessengerEXT functions.
- */
-void application::init_vulkan_debug_pfn()
-{
-    vk_create_debug_utils_messenger_ = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(vk_instance_, "vkCreateDebugUtilsMessengerEXT"));
-    assert(vk_create_debug_utils_messenger_ != VK_NULL_HANDLE && "Cannot find vkCreateDebugUtilsMessengerEXT function!");
-
-    vk_destroy_debug_utils_messenger_ = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(vk_instance_, "vkDestroyDebugUtilsMessengerEXT"));
-    assert(vk_destroy_debug_utils_messenger_ != VK_NULL_HANDLE && "Cannot find vkCreateDebugUtilsMessengerEXT function!");
 }
 
 /**
@@ -562,6 +551,12 @@ SwapchainSettings application::select_optimal_swapchain_settings(const Swapchain
  */
 void application::init_vulkan()
 {
+    // NOTE(dhaval): Initializing Volk Vulkan Loader
+    if (volkInitialize() != VK_SUCCESS)
+    {
+        assert(false, "Can't initialize Vulkan helper library");
+    }
+
     // NOTE(dhaval): Checking required extensions and layers.
     std::vector<const char*> extensions;
     assert(check_required_extensions(extensions) != false && "This device does not have the supported extensions");
@@ -597,10 +592,10 @@ void application::init_vulkan()
 
     VK_CHECK(vkCreateInstance(&instance_create_info, nullptr, &vk_instance_));
 
-    init_vulkan_debug_pfn();
+    volkLoadInstance(vk_instance_);
 
     // NOTE(dhaval): Create Vulkan Debug Messenger.
-    VK_CHECK(vk_create_debug_utils_messenger_(vk_instance_, &debug_utils_messenger_create_info, nullptr, &vk_debug_utils_messenger_));
+    VK_CHECK(vkCreateDebugUtilsMessengerEXT(vk_instance_, &debug_utils_messenger_create_info, nullptr, &vk_debug_utils_messenger_));
 
     // NOTE(dhaval): Create Vulkan Win32 Surface.
     VkWin32SurfaceCreateInfoKHR win32_surface_create_info{};
@@ -654,6 +649,8 @@ void application::init_vulkan()
     device_create_info.ppEnabledLayerNames = layers.data();
 
     VK_CHECK(vkCreateDevice(vk_physical_device_, &device_create_info, nullptr, &vk_device_));
+
+    volkLoadDevice(vk_device_);
 
     // NOTE(dhaval): Get Logical Device Queues.
     vkGetDeviceQueue(vk_device_, indicies.graphics_family.value(), 0, &vk_graphics_queue_);
@@ -837,7 +834,7 @@ void application::shutdown_vulkan()
     vkDestroySurfaceKHR(vk_instance_, vk_surface_khr_, nullptr);
     vk_surface_khr_ = VK_NULL_HANDLE;
 
-    vk_destroy_debug_utils_messenger_(vk_instance_, vk_debug_utils_messenger_, nullptr);
+    vkDestroyDebugUtilsMessengerEXT(vk_instance_, vk_debug_utils_messenger_, nullptr);
     vk_debug_utils_messenger_ = VK_NULL_HANDLE;
 
     vkDestroyInstance(vk_instance_, nullptr);

@@ -1,9 +1,6 @@
 #pragma once
 
-#define NOMINMAX
-#define VK_USE_PLATFORM_WIN32_KHR
-
-#include <vulkan/vulkan.h>
+#include <volk.h>
 
 #include <vector>
 #include <optional>
@@ -60,8 +57,6 @@ private:
     bool check_required_extensions(std::vector<const char*>& extensions) const;
     bool check_required_layers(std::vector<const char*>& layers) const;
     bool check_required_physical_device_extensions(VkPhysicalDevice physical_device, std::vector<const char*>& physical_device_extensions) const;
-
-    void init_vulkan_debug_pfn();
 
     SwapchainSupportDetails fetch_swapchain_support_details(VkPhysicalDevice physical_device, VkSurfaceKHR surface_khr) const;
     SwapchainSettings select_optimal_swapchain_settings(const SwapchainSupportDetails& swapchain_support_details) const;
@@ -122,8 +117,8 @@ private:
     static PFN_vkCreateDebugUtilsMessengerEXT vk_create_debug_utils_messenger_;
     static PFN_vkDestroyDebugUtilsMessengerEXT vk_destroy_debug_utils_messenger_;
 
-    const uint32_t window_width_ = 640;
-    const uint32_t window_height_ = 480;
+    uint32_t window_width_{0};
+    uint32_t window_height_{0};
 
     const uint32_t max_frames_in_flight_ = 2;
 };
