@@ -2,6 +2,8 @@
 #include "VulkanRenderer.hpp"
 #include "VulkanUtils.hpp"
 
+#include "RenderScene.hpp"
+
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -23,14 +25,12 @@ struct shared_renderer_state
  * \param texture_file
  * \param model_file
  */
-void renderer::init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file, const std::string& model_file)
+void renderer::init(const render_scene* render_scene)
 {
-    data_.init(vertex_shader_file, fragment_shader_file, texture_file, model_file);
-
     // NOTE(dhaval): Create Uniform buffers
     VkDeviceSize uniform_buffer_object_size = sizeof(shared_renderer_state);
 
-    uint32_t image_count = static_cast<uint32_t>(vk_renderer_context_.vk_swapchain_image_views_.size());
+    uint32_t image_count = static_cast<uint32_t>(vk_swapchain_context_.vk_swapchain_image_views_.size());
     vk_uniform_buffers_.resize(image_count);
     vk_uniform_buffers_memory_.resize(image_count);
 
@@ -44,13 +44,13 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     VkPipelineShaderStageCreateInfo vertex_shader_stage_create_info{};
     vertex_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     vertex_shader_stage_create_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertex_shader_stage_create_info.module = data_.get_vertex_shader();
+    vertex_shader_stage_create_info.module = render_scene->get_vertex_shader();
     vertex_shader_stage_create_info.pName = "main";
 
     VkPipelineShaderStageCreateInfo fragment_shader_stage_create_info{};
     fragment_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     fragment_shader_stage_create_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragment_shader_stage_create_info.module = data_.get_fragment_shader();
+    fragment_shader_stage_create_info.module = render_scene->get_fragment_shader();
     fragment_shader_stage_create_info.pName = "main";
 
     VkPipelineShaderStageCreateInfo shader_stages[] = {vertex_shader_stage_create_info, fragment_shader_stage_create_info};
@@ -76,14 +76,14 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(vk_renderer_context_.vk_extent_2d_.width);
-    viewport.height = static_cast<float>(vk_renderer_context_.vk_extent_2d_.height);
+    viewport.width = static_cast<float>(vk_swapchain_context_.vk_extent_2d_.width);
+    viewport.height = static_cast<float>(vk_swapchain_context_.vk_extent_2d_.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = vk_renderer_context_.vk_extent_2d_;
+    scissor.extent = vk_swapchain_context_.vk_extent_2d_;
 
     VkPipelineViewportStateCreateInfo viewport_state_create_info{};
     viewport_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -189,7 +189,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
 
     VkDescriptorSetAllocateInfo descriptor_set_allocate_info{};
     descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptor_set_allocate_info.descriptorPool = vk_renderer_context_.vk_descriptor_pool;
+    descriptor_set_allocate_info.descriptorPool = vk_swapchain_context_.vk_descriptor_pool;
     descriptor_set_allocate_info.descriptorSetCount = image_count;
     descriptor_set_allocate_info.pSetLayouts = descriptor_set_layouts.data();
 
@@ -198,7 +198,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
 
     for (size_t i = 0; i < image_count; i++)
     {
-        const vulkan_texture& texture = data_.get_texture();
+        const vulkan_texture& texture = render_scene->get_texture();
 
         VkDescriptorBufferInfo descriptor_buffer_info{};
         descriptor_buffer_info.buffer = vk_uniform_buffers_[i];
@@ -243,7 +243,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
 
     // NOTE(dhaval): Create RenderPass.
     VkAttachmentDescription color_attachment_description{};
-    color_attachment_description.format = vk_renderer_context_.vk_color_format_;
+    color_attachment_description.format = vk_swapchain_context_.vk_color_format_;
     color_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
     color_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     color_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -257,7 +257,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription depth_attachment_description{};
-    depth_attachment_description.format = vk_renderer_context_.vk_depth_format_;
+    depth_attachment_description.format = vk_swapchain_context_.vk_depth_format_;
     depth_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
     depth_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depth_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -321,15 +321,15 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
     vk_frame_buffers_.resize(image_count);
     for (size_t i = 0; i < image_count; i++)
     {
-        std::array<VkImageView, 2> attachment_image_views = {vk_renderer_context_.vk_swapchain_image_views_[i], vk_renderer_context_.vk_depth_image_view_};
+        std::array<VkImageView, 2> attachment_image_views = {vk_swapchain_context_.vk_swapchain_image_views_[i], vk_swapchain_context_.vk_depth_image_view_};
 
         VkFramebufferCreateInfo framebuffer_create_info{};
         framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebuffer_create_info.renderPass = vk_render_pass_;
         framebuffer_create_info.attachmentCount = static_cast<uint32_t>(attachment_image_views.size());
         framebuffer_create_info.pAttachments = attachment_image_views.data();
-        framebuffer_create_info.width = vk_renderer_context_.vk_extent_2d_.width;
-        framebuffer_create_info.height = vk_renderer_context_.vk_extent_2d_.height;
+        framebuffer_create_info.width = vk_swapchain_context_.vk_extent_2d_.width;
+        framebuffer_create_info.height = vk_swapchain_context_.vk_extent_2d_.height;
         framebuffer_create_info.layers = 1;
 
         VK_CHECK(vkCreateFramebuffer(vk_renderer_context_.vk_device_, &framebuffer_create_info, nullptr, &vk_frame_buffers_[i]));
@@ -361,7 +361,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
         render_pass_begin_info.renderPass = vk_render_pass_;
         render_pass_begin_info.framebuffer = vk_frame_buffers_[i];
         render_pass_begin_info.renderArea.offset = {0, 0};
-        render_pass_begin_info.renderArea.extent = vk_renderer_context_.vk_extent_2d_;
+        render_pass_begin_info.renderArea.extent = vk_swapchain_context_.vk_extent_2d_;
 
         std::array<VkClearValue, 2> clear_values = {};
         clear_values[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -373,7 +373,7 @@ void renderer::init(const std::string& vertex_shader_file, const std::string& fr
         vkCmdBindPipeline(vk_command_buffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_);
         vkCmdBindDescriptorSets(vk_command_buffers_[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline_layout_, 0, 1, &vk_descriptor_sets_[i], 0, nullptr);
 
-        const vulkan_mesh& mesh = data_.get_mesh();
+        const vulkan_mesh& mesh = render_scene->get_mesh();
 
         VkBuffer vertex_buffers[] = {mesh.get_vertex_buffer()};
         VkBuffer index_buffer = mesh.get_index_buffer();
@@ -410,7 +410,7 @@ VkCommandBuffer renderer::render(uint32_t image_index)
     const glm::vec3& up = {0.0f, 0.0f, 1.0f};
     const glm::vec3& zero = {0.0f, 0.0f, 0.0f};
 
-    const float aspect = vk_renderer_context_.vk_extent_2d_.width / (float)vk_renderer_context_.vk_extent_2d_.height;
+    const float aspect = vk_swapchain_context_.vk_extent_2d_.width / (float)vk_swapchain_context_.vk_extent_2d_.height;
     const float z_near = 0.1f;
     const float z_far = 10.0f;
 
@@ -433,8 +433,6 @@ VkCommandBuffer renderer::render(uint32_t image_index)
  */
 void renderer::shutdown()
 {
-    data_.shutdown();
-
     for (auto uniform_buffer : vk_uniform_buffers_)
     {
         vkDestroyBuffer(vk_renderer_context_.vk_device_, uniform_buffer, nullptr);

@@ -6,7 +6,8 @@
 #include <vector>
 
 #include "VulkanRendererContext.hpp"
-#include "RenderScene.hpp"
+
+class render_scene;
 
 /**
  * \brief Renderer that the application will create and use.
@@ -14,17 +15,17 @@
 class renderer
 {
 public:
-    renderer(const vulkan_renderer_context& context) : vk_renderer_context_(context), data_(context)
+    renderer(const vulkan_renderer_context& renderer_context, const vulkan_swapchain_context& swapchain_context) : vk_renderer_context_(renderer_context), vk_swapchain_context_(swapchain_context)
     {
     }
 
-    void init(const std::string& vertex_shader_file, const std::string& fragment_shader_file, const std::string& texture_file, const std::string& model_file);
+    void init(const render_scene* render_scene);
     VkCommandBuffer render(uint32_t image_index);
     void shutdown();
 
 private:
-    render_scene data_;
     vulkan_renderer_context vk_renderer_context_;
+    vulkan_swapchain_context vk_swapchain_context_;
 
     VkRenderPass vk_render_pass_{VK_NULL_HANDLE};
     VkDescriptorSetLayout vk_descriptor_set_layout_{VK_NULL_HANDLE};

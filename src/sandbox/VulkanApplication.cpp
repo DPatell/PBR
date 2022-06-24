@@ -1,13 +1,15 @@
 #include "VulkanApplication.hpp"
 #include "VulkanRenderer.hpp"
-#include "VulkanRendererContext.hpp"
 #include "VulkanUtils.hpp"
+
+#include "RenderScene.hpp"
 
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
 #include <iostream>
+#include <functional>
 #include <set>
 #include <array>
 
@@ -45,9 +47,13 @@ void application::run()
 {
     init_window();
     init_vulkan();
+    init_vulkan_swapchain();
+    init_render_scene();
     init_renderer();
     main_loop();
     shutdown_renderer();
+    shutdown_render_scene();
+    shutdown_vulkan_swapchain();
     shutdown_vulkan();
     shutdown_window();
 }
@@ -55,10 +61,19 @@ void application::run()
 void application::render()
 {
     vkWaitForFences(vk_device_, 1, &vk_in_flight_fences_[current_frame_], VK_TRUE, std::numeric_limits<uint64_t>::max());
-    vkResetFences(vk_device_, 1, &vk_in_flight_fences_[current_frame_]);
 
     uint32_t image_index = 0;
-    vkAcquireNextImageKHR(vk_device_, vk_swapchain_khr_, std::numeric_limits<uint64_t>::max(), vk_available_image_semaphores_[current_frame_], VK_NULL_HANDLE, &image_index);
+    VkResult result = vkAcquireNextImageKHR(vk_device_, vk_swapchain_khr_, std::numeric_limits<uint64_t>::max(), vk_available_image_semaphores_[current_frame_], VK_NULL_HANDLE, &image_index);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        recreate_vulkan_swapchain();
+        return;
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+    {
+        assert(false && "Cant aquire swapchain image");
+    }
 
     VkCommandBuffer command_buffer = renderer_->render(image_index);
 
@@ -77,6 +92,7 @@ void application::render()
     submit_info.signalSemaphoreCount = 1;
     submit_info.pSignalSemaphores = signal_semaphores;
 
+    vkResetFences(vk_device_, 1, &vk_in_flight_fences_[current_frame_]);
     VK_CHECK(vkQueueSubmit(vk_graphics_queue_, 1, &submit_info, vk_in_flight_fences_[current_frame_]));
 
     VkSwapchainKHR swapchains[] = {vk_swapchain_khr_};
@@ -90,7 +106,16 @@ void application::render()
     present_info_khr.pImageIndices = &image_index;
     present_info_khr.pResults = nullptr;
 
-    VK_CHECK(vkQueuePresentKHR(vk_present_queue_, &present_info_khr));
+    result = vkQueuePresentKHR(vk_present_queue_, &present_info_khr);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || frame_buffer_resized)
+    {
+        frame_buffer_resized = false;
+        recreate_vulkan_swapchain();
+    }
+    else if (result != VK_SUCCESS)
+    {
+        assert(false && "Cant aquire swapchain image");
+    }
 
     current_frame_ = (current_frame_ + 1) % max_frames_in_flight_;
 }
@@ -100,21 +125,11 @@ void application::render()
  */
 void application::init_window()
 {
-    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode* video_mode = glfwGetVideoMode(monitor);
-
-    glfwWindowHint(GLFW_RED_BITS, video_mode->redBits);
-    glfwWindowHint(GLFW_GREEN_BITS, video_mode->greenBits);
-    glfwWindowHint(GLFW_BLUE_BITS, video_mode->blueBits);
-    glfwWindowHint(GLFW_REFRESH_RATE, video_mode->refreshRate);
-
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    window_ = glfwCreateWindow(1024, 768, "Physically Based Renderer", nullptr, nullptr);
 
-    window_ = glfwCreateWindow(video_mode->width, video_mode->height, "Physically Based Renderer", monitor, nullptr);
-
-    window_width_ = video_mode->width;
-    window_height_ = video_mode->height;
+    glfwSetWindowUserPointer(window_, this);
+    glfwSetFramebufferSizeCallback(window_, &application::on_frame_buffer_resize);
 }
 
 /**
@@ -126,26 +141,49 @@ void application::shutdown_window()
     window_ = nullptr;
 }
 
+void application::on_frame_buffer_resize(GLFWwindow* window, int width, int height)
+{
+    application* app = reinterpret_cast<application*>(glfwGetWindowUserPointer(window));
+    assert(app != nullptr);
+    app->frame_buffer_resized = true;
+}
+
+
 /**
  * \brief
  */
+void application::init_render_scene()
+{
+    render_scene_ = new render_scene(vk_renderer_context_);
+    render_scene_->init(vertex_shader_path, fragment_shader_path, texture_path, model_path);
+}
+
+/**
+ * \brief 
+ */
+void application::shutdown_render_scene()
+{
+    render_scene_->shutdown();
+
+    delete render_scene_;
+    render_scene_ = nullptr;
+}
+
+/**
+ * \brief 
+ */
 void application::init_renderer()
 {
-    vulkan_renderer_context context = {};
-    context.vk_device_ = vk_device_;
-    context.vk_physical_device_ = vk_physical_device_;
-    context.vk_command_pool_ = vk_command_pool_;
-    context.vk_descriptor_pool = vk_descriptor_pool_;
-    context.vk_color_format_ = vk_swapchain_image_format_;
-    context.vk_depth_format_ = vk_depth_format_;
-    context.vk_extent_2d_ = vk_swapchain_extent_2d_;
-    context.vk_swapchain_image_views_ = vk_swapchain_image_views_;
-    context.vk_depth_image_view_ = vk_depth_image_view_;
-    context.graphics_queue = vk_graphics_queue_;
-    context.present_queue = vk_present_queue_;
+    vulkan_swapchain_context vk_swapchain_context = {};
+    vk_swapchain_context.vk_descriptor_pool = vk_descriptor_pool_;
+    vk_swapchain_context.vk_color_format_ = vk_swapchain_image_format_;
+    vk_swapchain_context.vk_depth_format_ = vk_depth_format_;
+    vk_swapchain_context.vk_extent_2d_ = vk_swapchain_extent_2d_;
+    vk_swapchain_context.vk_swapchain_image_views_ = vk_swapchain_image_views_;
+    vk_swapchain_context.vk_depth_image_view_ = vk_depth_image_view_;
 
-    renderer_ = new renderer(context);
-    renderer_->init(vertex_shader_path, fragment_shader_path, texture_path, model_path);
+    renderer_ = new renderer(vk_renderer_context_, vk_swapchain_context);
+    renderer_->init(render_scene_);
 }
 
 /**
@@ -293,11 +331,11 @@ queue_family_indicies application::fetch_queue_family_indicies(VkPhysicalDevice 
     std::vector<VkQueueFamilyProperties> queue_family_properties(queue_family_count);
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, queue_family_properties.data());
 
-    int i = 0;
     queue_family_indicies indicies{};
 
-    for (const auto& queue_family_property : queue_family_properties)
+    for (int i = 0; i < queue_family_properties.size(); i++)
     {
+        const auto& queue_family_property = queue_family_properties[i];
         if (queue_family_property.queueCount > 0 && queue_family_property.queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
             indicies.graphics_family = std::make_optional(i);
@@ -315,8 +353,6 @@ queue_family_indicies application::fetch_queue_family_indicies(VkPhysicalDevice 
         {
             break;
         }
-
-        i++;
     }
 
     return indicies;
@@ -536,9 +572,13 @@ SwapchainSettings application::select_optimal_swapchain_settings(const Swapchain
     // NOTE(dhaval): Otherwise, manually set the extent to match the min/max extent bounds
     else
     {
+        int width;
+        int height;
+        glfwGetFramebufferSize(window_, &width, &height);
+
         const VkSurfaceCapabilitiesKHR& capabilities = swapchain_support_details.surface_capabilities_khr;
 
-        swapchain_settings.extent_2d = {window_width_, window_height_};
+        swapchain_settings.extent_2d = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
         swapchain_settings.extent_2d.width = std::max(capabilities.minImageExtent.width, std::min(swapchain_settings.extent_2d.width, capabilities.maxImageExtent.width));
         swapchain_settings.extent_2d.height = std::max(capabilities.minImageExtent.height, std::min(swapchain_settings.extent_2d.height, capabilities.maxImageExtent.height));
     }
@@ -554,7 +594,7 @@ void application::init_vulkan()
     // NOTE(dhaval): Initializing Volk Vulkan Loader
     if (volkInitialize() != VK_SUCCESS)
     {
-        assert(false, "Can't initialize Vulkan helper library");
+        assert(false && "Can't initialize Vulkan helper library");
     }
 
     // NOTE(dhaval): Checking required extensions and layers.
@@ -659,7 +699,77 @@ void application::init_vulkan()
     vkGetDeviceQueue(vk_device_, indicies.present_family.value(), 0, &vk_present_queue_);
     assert(vk_present_queue_ != VK_NULL_HANDLE && "Present Queue could not be retreived");
 
+    // NOTE(dhaval): Create Command Pool
+    VkCommandPoolCreateInfo command_pool_create_info{};
+    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_create_info.queueFamilyIndex = indicies.graphics_family.value();
+    command_pool_create_info.flags = 0;
+
+    VK_CHECK(vkCreateCommandPool(vk_device_, &command_pool_create_info, nullptr, &vk_command_pool_));
+
+    // NOTE(dhaval): Create Sync Objects
+    vk_available_image_semaphores_.resize(max_frames_in_flight_);
+    vk_finished_render_semaphores_.resize(max_frames_in_flight_);
+    vk_in_flight_fences_.resize(max_frames_in_flight_);
+
+    for (size_t i = 0; i < max_frames_in_flight_; i++)
+    {
+        VkSemaphoreCreateInfo semaphore_create_info{};
+        semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VK_CHECK(vkCreateSemaphore(vk_device_, &semaphore_create_info, nullptr, &vk_available_image_semaphores_[i]));
+        VK_CHECK(vkCreateSemaphore(vk_device_, &semaphore_create_info, nullptr, &vk_finished_render_semaphores_[i]));
+
+        VkFenceCreateInfo fence_create_info{};
+        fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        VK_CHECK(vkCreateFence(vk_device_, &fence_create_info, nullptr, &vk_in_flight_fences_[i]));
+    }
+
+    vk_renderer_context_.vk_device_ = vk_device_;
+    vk_renderer_context_.vk_physical_device_ = vk_physical_device_;
+    vk_renderer_context_.vk_command_pool_ = vk_command_pool_;
+    vk_renderer_context_.graphics_queue = vk_graphics_queue_;
+    vk_renderer_context_.present_queue = vk_present_queue_;
+}
+
+/**
+ * \brief Destroys all the vulkan resources that were initialized in init_vulkan().
+ */
+void application::shutdown_vulkan()
+{
+    vkDestroyCommandPool(vk_device_, vk_command_pool_, nullptr);
+    vk_command_pool_ = VK_NULL_HANDLE;
+
+    for (size_t i = 0; i < max_frames_in_flight_; i++)
+    {
+        vkDestroySemaphore(vk_device_, vk_finished_render_semaphores_[i], nullptr);
+        vkDestroySemaphore(vk_device_, vk_available_image_semaphores_[i], nullptr);
+        vkDestroyFence(vk_device_, vk_in_flight_fences_[i], nullptr);
+    }
+
+    vk_finished_render_semaphores_.clear();
+    vk_available_image_semaphores_.clear();
+    vk_in_flight_fences_.clear();
+
+    vkDestroyDevice(vk_device_, nullptr);
+    vk_device_ = VK_NULL_HANDLE;
+
+    vkDestroySurfaceKHR(vk_instance_, vk_surface_khr_, nullptr);
+    vk_surface_khr_ = VK_NULL_HANDLE;
+
+    vkDestroyDebugUtilsMessengerEXT(vk_instance_, vk_debug_utils_messenger_, nullptr);
+    vk_debug_utils_messenger_ = VK_NULL_HANDLE;
+
+    vkDestroyInstance(vk_instance_, nullptr);
+    vk_instance_ = VK_NULL_HANDLE;
+}
+
+void application::init_vulkan_swapchain()
+{
     // NOTE(dhaval): Create Swapchain
+    queue_family_indicies indicies = fetch_queue_family_indicies(vk_physical_device_);
     SwapchainSupportDetails swapchain_support_details = fetch_swapchain_support_details(vk_physical_device_, vk_surface_khr_);
     SwapchainSettings swapchain_settings = select_optimal_swapchain_settings(swapchain_support_details);
 
@@ -717,13 +827,22 @@ void application::init_vulkan()
     vk_swapchain_image_format_ = swapchain_settings.surface_format_khr.format;
     vk_swapchain_extent_2d_ = swapchain_settings.extent_2d;
 
-    // NOTE(dhaval): Create Command Pool
-    VkCommandPoolCreateInfo command_pool_create_info{};
-    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    command_pool_create_info.queueFamilyIndex = indicies.graphics_family.value();
-    command_pool_create_info.flags = 0;
+    // NOTE(dhaval): Create swapchain image views
+    vk_swapchain_image_views_.resize(swapchain_image_count);
+    for (size_t i = 0; i < vk_swapchain_image_views_.size(); i++)
+    {
+        vk_swapchain_image_views_[i] = vulkan_utils::create_image_2d_view(vk_renderer_context_, vk_swapchain_images_[i], 1, vk_swapchain_image_format_, VK_IMAGE_ASPECT_COLOR_BIT);
+    }
 
-    VK_CHECK(vkCreateCommandPool(vk_device_, &command_pool_create_info, nullptr, &vk_command_pool_));
+    // NOTE(dhaval): Create depth buffer
+    vk_depth_format_ = select_optimal_depth_format();
+
+    vulkan_utils::create_image_2d(vk_renderer_context_, vk_swapchain_extent_2d_.width, vk_swapchain_extent_2d_.height, 1, vk_depth_format_, VK_IMAGE_TILING_OPTIMAL,
+                                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_depth_image_, vk_depth_image_memory_);
+
+    // NOTE(dhaval): Create depth buffer image view
+    vk_depth_image_view_ = vulkan_utils::create_image_2d_view(vk_renderer_context_, vk_depth_image_, 1, vk_depth_format_, VK_IMAGE_ASPECT_DEPTH_BIT);
+    vulkan_utils::transition_image_layout(vk_renderer_context_, vk_depth_image_, 1, vk_depth_format_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     // NOTE(dhaval): Create descriptor pools
     std::array<VkDescriptorPoolSize, 2> descriptor_pool_sizes{};
@@ -740,73 +859,12 @@ void application::init_vulkan()
     descriptor_pool_create_info.flags = 0;
 
     VK_CHECK(vkCreateDescriptorPool(vk_device_, &descriptor_pool_create_info, nullptr, &vk_descriptor_pool_));
-
-    // NOTE(dhaval): Create Sync Objects
-    vk_available_image_semaphores_.resize(max_frames_in_flight_);
-    vk_finished_render_semaphores_.resize(max_frames_in_flight_);
-    vk_in_flight_fences_.resize(max_frames_in_flight_);
-
-    for (size_t i = 0; i < max_frames_in_flight_; i++)
-    {
-        VkSemaphoreCreateInfo semaphore_create_info{};
-        semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        VK_CHECK(vkCreateSemaphore(vk_device_, &semaphore_create_info, nullptr, &vk_available_image_semaphores_[i]));
-        VK_CHECK(vkCreateSemaphore(vk_device_, &semaphore_create_info, nullptr, &vk_finished_render_semaphores_[i]));
-
-        VkFenceCreateInfo fence_create_info{};
-        fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-        VK_CHECK(vkCreateFence(vk_device_, &fence_create_info, nullptr, &vk_in_flight_fences_[i]));
-    }
-
-    vulkan_renderer_context renderer_context{};
-    renderer_context.vk_device_ = vk_device_;
-    renderer_context.vk_physical_device_ = vk_physical_device_;
-    renderer_context.vk_command_pool_ = vk_command_pool_;
-    renderer_context.graphics_queue = vk_graphics_queue_;
-    renderer_context.present_queue = vk_present_queue_;
-
-    // NOTE(dhaval): Create swapchain image views
-    vk_swapchain_image_views_.resize(swapchain_image_count);
-    for (size_t i = 0; i < vk_swapchain_image_views_.size(); i++)
-    {
-        vk_swapchain_image_views_[i] = vulkan_utils::create_image_2d_view(renderer_context, vk_swapchain_images_[i], 1, vk_swapchain_image_format_, VK_IMAGE_ASPECT_COLOR_BIT);
-    }
-
-    // NOTE(dhaval): Create depth buffer
-    vk_depth_format_ = select_optimal_depth_format();
-
-    vulkan_utils::create_image_2d(renderer_context, vk_swapchain_extent_2d_.width, vk_swapchain_extent_2d_.height, 1, vk_depth_format_, VK_IMAGE_TILING_OPTIMAL,
-                                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vk_depth_image_, vk_depth_image_memory_);
-
-    // NOTE(dhaval): Create depth buffer image view
-    vk_depth_image_view_ = vulkan_utils::create_image_2d_view(renderer_context, vk_depth_image_, 1, vk_depth_format_, VK_IMAGE_ASPECT_DEPTH_BIT);
-    vulkan_utils::transition_image_layout(renderer_context, vk_depth_image_, 1, vk_depth_format_, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 }
 
-/**
- * \brief Destroys all the vulkan resources that were initialized in init_vulkan().
- */
-void application::shutdown_vulkan()
+void application::shutdown_vulkan_swapchain()
 {
-    vkDestroyCommandPool(vk_device_, vk_command_pool_, nullptr);
-    vk_command_pool_ = VK_NULL_HANDLE;
-
     vkDestroyDescriptorPool(vk_device_, vk_descriptor_pool_, nullptr);
     vk_descriptor_pool_ = VK_NULL_HANDLE;
-
-    for (size_t i = 0; i < max_frames_in_flight_; i++)
-    {
-        vkDestroySemaphore(vk_device_, vk_finished_render_semaphores_[i], nullptr);
-        vkDestroySemaphore(vk_device_, vk_available_image_semaphores_[i], nullptr);
-        vkDestroyFence(vk_device_, vk_in_flight_fences_[i], nullptr);
-    }
-
-    vk_finished_render_semaphores_.clear();
-    vk_available_image_semaphores_.clear();
-    vk_in_flight_fences_.clear();
 
     vkDestroyImageView(vk_device_, vk_depth_image_view_, nullptr);
     vk_depth_image_view_ = VK_NULL_HANDLE;
@@ -827,18 +885,25 @@ void application::shutdown_vulkan()
 
     vkDestroySwapchainKHR(vk_device_, vk_swapchain_khr_, nullptr);
     vk_swapchain_khr_ = VK_NULL_HANDLE;
+}
 
-    vkDestroyDevice(vk_device_, nullptr);
-    vk_device_ = VK_NULL_HANDLE;
+void application::recreate_vulkan_swapchain()
+{
+    int width = 0;
+    int height = 0;
+    while (width == 0 || height == 0)
+    {
+        glfwGetFramebufferSize(window_, &width, &height);
+        glfwWaitEvents();
+    }
 
-    vkDestroySurfaceKHR(vk_instance_, vk_surface_khr_, nullptr);
-    vk_surface_khr_ = VK_NULL_HANDLE;
+    vkDeviceWaitIdle(vk_device_);
 
-    vkDestroyDebugUtilsMessengerEXT(vk_instance_, vk_debug_utils_messenger_, nullptr);
-    vk_debug_utils_messenger_ = VK_NULL_HANDLE;
+    shutdown_renderer();
+    shutdown_vulkan_swapchain();
 
-    vkDestroyInstance(vk_instance_, nullptr);
-    vk_instance_ = VK_NULL_HANDLE;
+    init_vulkan_swapchain();
+    init_renderer();
 }
 
 /**
@@ -853,8 +918,8 @@ void application::main_loop()
 
     while (!glfwWindowShouldClose(window_))
     {
-        glfwPollEvents();
         render();
+        glfwPollEvents();
     }
 
     vkDeviceWaitIdle(vk_device_);

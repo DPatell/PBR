@@ -5,8 +5,11 @@
 #include <vector>
 #include <optional>
 
+#include "VulkanRendererContext.hpp"
+
 struct GLFWwindow;
 class renderer;
+class render_scene;
 
 /**
  * \brief Helper Struct that is used to determine whether the physical device chosen supports a certain queue family.
@@ -16,10 +19,7 @@ struct queue_family_indicies
     std::optional<uint32_t> graphics_family{std::nullopt};
     std::optional<uint32_t> present_family{std::nullopt};
 
-    bool is_complete()
-    {
-        return graphics_family.has_value() && present_family.has_value();
-    }
+    inline bool is_complete() { return graphics_family.has_value() && present_family.has_value(); }
 };
 
 /**
@@ -68,17 +68,27 @@ private:
     void init_vulkan();
     void shutdown_vulkan();
 
+    void init_vulkan_swapchain();
+    void shutdown_vulkan_swapchain();
+    void recreate_vulkan_swapchain();
+
+    void init_render_scene();
+    void shutdown_render_scene();
+
     void init_renderer();
     void shutdown_renderer();
 
     void render();
-
     void main_loop();
+
+    static void on_frame_buffer_resize(GLFWwindow* window, int width, int height);
 
 private:
     GLFWwindow* window_{nullptr};
-
     renderer* renderer_{nullptr};
+    render_scene* render_scene_{nullptr};
+
+    vulkan_renderer_context vk_renderer_context_ = {};
 
     VkInstance vk_instance_{VK_NULL_HANDLE};
     VkPhysicalDevice vk_physical_device_{VK_NULL_HANDLE};
@@ -117,8 +127,7 @@ private:
     static PFN_vkCreateDebugUtilsMessengerEXT vk_create_debug_utils_messenger_;
     static PFN_vkDestroyDebugUtilsMessengerEXT vk_destroy_debug_utils_messenger_;
 
-    uint32_t window_width_{0};
-    uint32_t window_height_{0};
+    bool frame_buffer_resized{false};
 
     const uint32_t max_frames_in_flight_ = 2;
 };
